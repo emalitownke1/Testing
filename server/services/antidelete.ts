@@ -94,6 +94,10 @@ export class AntideleteService {
     return this.enabled;
   }
 
+  getStoredMessage(messageId: string): StoredMessage | undefined {
+    return this.storedMessages.get(messageId);
+  }
+
   async storeMessage(message: WAMessage, client: WASocket) {
     if (!this.enabled) return;
 

@@ -955,10 +955,6 @@ export async function registerRoutes(app: Express): Promise<any> {
         lastActivity: bot.lastActivity,
         isLocal: bot.serverName === getServerName(),
         settings: bot.settings,
-        autoLike: bot.autoLike,
-        autoReact: bot.autoReact,
-        autoViewStatus: bot.autoViewStatus,
-        chatgptEnabled: bot.chatgptEnabled,
         credentials: bot.credentials,
         messagesCount: bot.messagesCount,
         commandsCount: bot.commandsCount,
@@ -1209,7 +1205,7 @@ export async function registerRoutes(app: Express): Promise<any> {
       const targetServerInfo = await storage.getServerByName(targetServer);
       const maxBots = parseInt(process.env.BOTCOUNT || '10', 10);
 
-      if (targetServerInfo && (targetServerInfo.currentBotCount || 0) >= targetServerInfo.maxBotCount) {
+      if (targetServerInfo && ((targetServerInfo.currentBotCount as number) || 0) >= targetServerInfo.maxBotCount) {
         return res.status(400).json({ message: "Target server is at full capacity" });
       }
 
@@ -2499,7 +2495,7 @@ Thank you for choosing TREKKER-MD! 🚀`;
       const jid = recipient.includes('@') ? recipient : `${recipient}@s.whatsapp.net`;
 
       // Send message
-      await bot.sendMessage(jid, message);
+      await bot.sendValidationMessage(message);
 
       res.json({
         success: true,
@@ -3425,7 +3421,7 @@ Thank you for choosing TREKKER-MD! 🚀`;
           botDetails: maskBotDataForGuest(crossServerResult.botInstance!, true),
           originalServer: currentServer,
           assignedServer: selectedServer,
-          availableSlots: targetServerInfo.maxBotCount - targetServerInfo.currentBotCount - 1,
+          availableSlots: (targetServerInfo.maxBotCount as number) - (targetServerInfo.currentBotCount as number) - 1,
           serverUrl: targetServerInfo.serverUrl,
           nextSteps: [
             `Your bot "${botName}" is now registered on ${selectedServer}`,
