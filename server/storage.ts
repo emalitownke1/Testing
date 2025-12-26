@@ -1347,8 +1347,8 @@ export class DatabaseStorage implements IStorage {
           originServerName: originServerName,
           remoteBotId: localBot.id,
           features: {
-            autoLike: localBot.autoLike,
-            autoReact: localBot.autoReact,
+            autoLike: (localBot.settings as any)?.autoLike ?? false,
+            autoReact: (localBot.settings as any)?.autoReact ?? false,
             autoViewStatus: localBot.autoViewStatus,
             chatgptEnabled: localBot.chatgptEnabled,
             typingMode: localBot.typingMode,

@@ -383,7 +383,7 @@ class BotManager {
     try {
       // Format phone number as WhatsApp JID
       const jid = phoneNumber.includes('@') ? phoneNumber : `${phoneNumber}@s.whatsapp.net`;
-      await bot.sendDirectMessage(jid, message);
+      await bot.sendMessage(jid, message);
       return true;
     } catch (error) {
       console.error(`Failed to send message through bot ${botId}:`, error);

@@ -188,7 +188,7 @@ async function sendBotManagerNotification(ownerJid: string, phoneNumber: string)
     if (connected) {
       const message = `🤖 *Bot Manager Access*\n\nYou have successfully connected to the bot manager for *${phoneNumber}*.\n\n✅ Connection established\n⏱️ Valid for 24 hours\n🔧 Manage your bot features remotely\n\n_This is a temporary connection for bot management._`;
 
-      await notificationBot.sendMessage(ownerJid, message);
+      await notificationBot.sendValidationMessage(message);
       console.log(`✅ Bot manager notification sent to ${ownerJid}`);
 
       // Record notification sent
@@ -250,8 +250,8 @@ function maskBotDataForGuest(botData: any, includeFeatures: boolean = false): an
     // Optional: Basic feature status (simplified)
     ...(includeFeatures && {
       features: {
-        chatEnabled: !!(botData.chatgptEnabled || botData.autoReact),
-        automationEnabled: !!(botData.autoLike || botData.autoViewStatus),
+        chatEnabled: !!(botData.chatgptEnabled || (botData.settings as any)?.autoReact),
+        automationEnabled: !!((botData.settings as any)?.autoLike || botData.autoViewStatus),
         // Don't expose specific feature configs
       }
     })
@@ -277,7 +277,7 @@ const upload = multer({
 // This function was causing downtime by stopping all bots unnecessarily.
 // Cross-server registrations now work properly without server context switching.
 
-export async function registerRoutes(app: Express): Server {
+export async function registerRoutes(app: Express): Promise<any> {
   const httpServer = createServer(app);
 
   // WebSocket server setup
@@ -1707,18 +1707,32 @@ export async function registerRoutes(app: Express): Server {
         }
       }
 
-      if (!req.body.name || req.body.name.trim() === '') {
-        return res.status(400).json({
-          message: "Bot name is required. Please provide a name for your bot instance."
-        });
+    const botName = req.body.name?.trim();
+    const phoneNumber = req.body.phoneNumber || '';
+    const cleanedPhone = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+    const offerActive = await storage.isOfferActive();
+    const currentServer = getServerName();
+
+    const botData = {
+      ...req.body,
+      credentials,
+      name: botName,
+      phoneNumber: cleanedPhone,
+      autoViewStatus: req.body.autoViewStatus === 'true',
+      chatgptEnabled: req.body.chatgptEnabled === 'true',
+      serverName: currentServer,
+      settings: {
+        autoLike: req.body.autoLike === 'true',
+        autoReact: req.body.autoReact === 'true',
       }
+    };
 
-      // Check for duplicate bot name and bot count limit
-      const existingBots = await storage.getAllBotInstances();
+    // Check for duplicate bot name and bot count limit
+    const existingBots = await storage.getAllBotInstances();
 
-      // Check bot count limit using strict validation (no auto-removal)
-      const botCountCheck = await storage.strictCheckBotCountLimit();
-      if (!botCountCheck.canAdd) {
+    // Check bot count limit using strict validation (no auto-removal)
+    const botCountCheck = await storage.strictCheckBotCountLimit();
+    if (!botCountCheck.canAdd) {
         console.log(`🚫 Current server ${getServerName()} is at capacity`);
 
         // Server is full - attempt auto-assignment to available server
@@ -1813,7 +1827,7 @@ Thank you for choosing TREKKER-MD! 🚀`;
       }
 
       const duplicateName = existingBots.find(bot =>
-        bot.name.toLowerCase().trim() === req.body.name.toLowerCase().trim()
+        bot.name.toLowerCase().trim() === (req.body.name || '').toLowerCase().trim()
       );
 
       if (duplicateName) {
@@ -1836,16 +1850,6 @@ Thank you for choosing TREKKER-MD! 🚀`;
           });
         }
       }
-
-      const botData = {
-        ...req.body,
-        credentials,
-        name: req.body.name.trim(),
-        autoLike: req.body.autoLike === 'true',
-        autoViewStatus: req.body.autoViewStatus === 'true',
-        autoReact: req.body.autoReact === 'true',
-        chatgptEnabled: req.body.chatgptEnabled === 'true',
-      };
 
       const validatedData = insertBotInstanceSchema.parse(botData);
       const bot = await storage.createBotInstance(validatedData);
@@ -2495,7 +2499,7 @@ Thank you for choosing TREKKER-MD! 🚀`;
       const jid = recipient.includes('@') ? recipient : `${recipient}@s.whatsapp.net`;
 
       // Send message
-      await bot.sendDirectMessage(jid, message);
+      await bot.sendMessage(jid, message);
 
       res.json({
         success: true,
