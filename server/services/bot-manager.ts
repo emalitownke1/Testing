@@ -181,27 +181,35 @@ class BotManager {
 
       // STEP 4: Update credentials from database BEFORE starting bot
       // This ensures latest credentials are loaded on every restart
-      console.log(`BotManager: 🔐 [CREDENTIAL UPDATE] Updating credentials on restart for bot ${botId}`);
       
       if (freshBotInstance.credentials) {
-        // Credentials exist in database - update bot instance with them
-        console.log(`BotManager: ✅ Loading credentials from database for bot ${botId}`);
-        console.log(`BotManager: 📁 Credentials will be used in isolated container: auth/${freshBotInstance.serverName}/bot_${botId}/`);
+        // Only update database if credentials are not already set in the instance
+        // or if they've changed. We check if they are the same to avoid unnecessary DB writes.
+        const currentCreds = JSON.stringify(botInstance.credentials);
+        const newCreds = JSON.stringify(freshBotInstance.credentials);
         
-        // Ensure credentials are attached to the instance before bot creation
-        // This allows Baileys to write them to the container's creds.json file
-        freshBotInstance.credentials = freshBotInstance.credentials;
-        
-        // Update database to confirm credentials are set (even though they already are)
-        // This ensures the update timestamp is current
-        try {
-          await storage.updateBotInstance(botId, {
-            credentials: freshBotInstance.credentials
-          });
-          console.log(`BotManager: ✅ Credentials confirmed in database for bot ${botId}`);
-        } catch (dbError) {
-          console.error(`BotManager: ⚠️ Failed to confirm credentials in database:`, dbError);
-          // Don't stop - credentials are already in freshBotInstance
+        if (currentCreds !== newCreds) {
+          console.log(`BotManager: 🔐 [CREDENTIAL UPDATE] Updating credentials on restart for bot ${botId}`);
+          console.log(`BotManager: ✅ Loading credentials from database for bot ${botId}`);
+          console.log(`BotManager: 📁 Credentials will be used in isolated container: auth/${freshBotInstance.serverName}/bot_${botId}/`);
+          
+          // Ensure credentials are attached to the instance before bot creation
+          // This allows Baileys to write them to the container's creds.json file
+          freshBotInstance.credentials = freshBotInstance.credentials;
+          
+          // Update database to confirm credentials are set (even though they already are)
+          // This ensures the update timestamp is current
+          try {
+            await storage.updateBotInstance(botId, {
+              credentials: freshBotInstance.credentials
+            });
+            console.log(`BotManager: ✅ Credentials confirmed in database for bot ${botId}`);
+          } catch (dbError) {
+            console.error(`BotManager: ⚠️ Failed to confirm credentials in database:`, dbError);
+            // Don't stop - credentials are already in freshBotInstance
+          }
+        } else {
+          console.log(`BotManager: 🔐 [CREDENTIAL PRESERVED] Credentials for bot ${botId} are already up to date.`);
         }
       } else {
         console.log(`BotManager: ⚠️ No credentials in database - bot ${botId} will require QR code pairing`);
