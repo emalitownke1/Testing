@@ -179,13 +179,10 @@ class BotManager {
         return;
       }
 
-      // STEP 4: Update credentials from database BEFORE starting bot
-      // This ensures latest credentials are loaded on every restart
-      
+      // STEP 4: Verify credentials are available for session restoration
       if (freshBotInstance.credentials) {
-        console.log(`BotManager: 🔐 [CREDENTIAL UPDATE] Loading latest credentials from database for bot ${botId}`);
-        // Ensure credentials are attached to the instance before bot creation
-        botInstance.credentials = freshBotInstance.credentials;
+        console.log(`BotManager: 🔐 [SESSION RESTORATION] Found credentials in database for bot ${botId}`);
+        console.log(`BotManager:    Credentials will be restored to creds.json if server restarted`);
       } else {
         console.log(`BotManager: ⚠️ No credentials in database - bot ${botId} will require QR code pairing`);
       }
@@ -193,12 +190,13 @@ class BotManager {
       // STEP 5: PRESERVE existing session files
       // This allows bots to resume using their existing authenticated session
       // Structure: auth/{serverName}/bot_{botId}/creds.json + session files
-      console.log(`BotManager: 🔄 [CONTAINER ISOLATION] Preserving existing session files for bot ${botId}`);
-      console.log(`BotManager:    If creds.json exists in container, Baileys will use it without re-pairing`);
+      console.log(`BotManager: 🔄 [CONTAINER ISOLATION] Preparing bot instance with session restoration capability`);
+      console.log(`BotManager:    If creds.json exists on disk, Baileys will use it immediately`);
+      console.log(`BotManager:    If creds.json missing but in database, it will be restored automatically`);
 
       // STEP 6: Create new WhatsAppBot instance in isolated container
-      // Each bot gets its own isolated auth directory
-      // ✅ CREDENTIALS ARE NOW READY BEFORE INSTANTIATION
+      // The constructor will automatically restore credentials from database if creds.json doesn't exist
+      // This handles the server restart scenario where session files are preserved
       const newBot = new WhatsAppBot(freshBotInstance);
       this.bots.set(botId, newBot);
       console.log(`BotManager: 📦 Created new bot instance in isolated container`);
