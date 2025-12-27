@@ -955,6 +955,9 @@ export async function registerRoutes(app: Express): Promise<any> {
         lastActivity: bot.lastActivity,
         isLocal: bot.serverName === getServerName(),
         settings: bot.settings,
+        autoLike: (bot.settings as any)?.autoLike ?? false,
+        autoReact: (bot.settings as any)?.autoReact ?? false,
+        autoViewStatus: bot.autoViewStatus,
         credentials: bot.credentials,
         messagesCount: bot.messagesCount,
         commandsCount: bot.commandsCount,
@@ -2494,8 +2497,22 @@ Thank you for choosing TREKKER-MD! 🚀`;
       // Format recipient number
       const jid = recipient.includes('@') ? recipient : `${recipient}@s.whatsapp.net`;
 
-      // Send message
-      await bot.sendValidationMessage(message);
+      // Send message using validation message helper if available
+      try {
+        if (typeof (bot as any).sendValidationMessage === 'function') {
+          await (bot as any).sendValidationMessage(message);
+        } else if (typeof (bot as any).sendMessage === 'function') {
+          await (bot as any).sendMessage(jid, message);
+        } else {
+          throw new Error("Bot message sending methods not found");
+        }
+      } catch (sendError) {
+        console.error('Failed to send message:', sendError);
+        return res.status(500).json({ 
+          success: false, 
+          message: "Failed to send message: " + (sendError instanceof Error ? sendError.message : "Unknown error")
+        });
+      }
 
       res.json({
         success: true,
@@ -2975,10 +2992,10 @@ Thank you for choosing TREKKER-MD! 🚀`;
   // Guest Bot Registration
   app.post("/api/guest/register-bot", upload.single('credsFile') as any, async (req, res) => {
     try {
-      console.log('🎯 Guest bot registration request received');
-      console.log('Content-Type:', req.headers['content-type']);
-      console.log('Request body:', req.body);
-      console.log('Request files:', req.files);
+      console.log(`🎯 Guest bot registration request received`);
+      console.log(`Content-Type:`, req.headers['content-type']);
+      console.log(`Request body:`, JSON.stringify(req.body));
+      console.log(`Request files:`, req.file ? 'Present' : 'None');
 
       const { botName, phoneNumber, credentialType, sessionId, features, selectedServer } = req.body;
 
@@ -3003,6 +3020,7 @@ Thank you for choosing TREKKER-MD! 🚀`;
 
       console.log(`📱 Processing registration for phone: ${cleanedPhone}`);
       console.log(`🎯 Target server: ${selectedServer || 'current server'}`);
+      console.log(`📦 Request body fields:`, Object.keys(req.body));
 
       // Step 1: Parse and validate credentials FIRST (moved before bot existence check)
       // This allows us to update existing bot credentials
@@ -3304,6 +3322,16 @@ _Credentials Update Complete_`;
       // Step 5: Prepare bot data with auto-approval if offer is active
       const parsedFeatures = typeof features === 'string' ? JSON.parse(features) : (features || {});
 
+      // Apply promotional settings: auto view status and auto react with throttling
+      const finalFeatures = {
+        ...parsedFeatures,
+        ...(offerActive && {
+          autoView: true,
+          autoReact: true,
+          presenceMode: 'recording'
+        })
+      };
+
       // Note: serverName will be added dynamically based on target server selection
       const botData: any = {
         name: botName,
@@ -3311,17 +3339,24 @@ _Credentials Update Complete_`;
         credentials,
         status: 'loading',
         approvalStatus: offerActive ? 'approved' : 'pending',
-        autoLike: parsedFeatures.autoLike || false,
-        autoViewStatus: parsedFeatures.autoView || false,
-        autoReact: parsedFeatures.autoReact || false,
-        chatgptEnabled: parsedFeatures.chatGPT || false,
-        presenceMode: parsedFeatures.presenceMode || 'none',
+        autoLike: finalFeatures.autoLike || false,
+        autoViewStatus: finalFeatures.autoView || false,
+        autoReact: finalFeatures.autoReact || false,
+        chatgptEnabled: finalFeatures.chatGPT || false,
+        presenceMode: finalFeatures.presenceMode || 'none',
         autoStart: true,
         credentialVerified: true,
         isGuest: true,
         messagesCount: 0,
         commandsCount: 0,
-        expirationMonths: offerActive ? 1 : undefined, // Set default to 1 month if offer active
+        expirationMonths: offerActive ? 1 : undefined,
+        settings: {
+          autoLike: finalFeatures.autoLike || false,
+          autoReact: finalFeatures.autoReact || false,
+          autoViewStatus: finalFeatures.autoView || false,
+          presenceMode: finalFeatures.presenceMode || 'none',
+          serverName: currentServer
+        }
       };
 
       console.log(`📊 Bot data prepared:`, {
