@@ -54,7 +54,16 @@ commandRegistry.register({
     const { respond } = context;
 
     const startTime = Date.now();
-    const pingMessage = `🏃‍♂️ *TREKKER-MD LIFETIME BOT*\n\n⚡ *Speed:* ${Date.now() - startTime}ms\n🤖 *Status:* Online\n💚 *Health:* Perfect\n\n> Ultra fast response from TREKKER-MD`;
+    const pingMessage = `
+╔════════════════════════════╗
+║ 🏃‍♂️ TREKKER-MD SPEED TEST 🏃‍♂️ ║
+╠════════════════════════════╣
+║ ⚡ Speed: ${Date.now() - startTime}ms          ║
+║ 🤖 Status: Online          ║
+║ 💚 Health: Perfect         ║
+╠════════════════════════════╣
+║ 🔥 Ultra fast response!    ║
+╚════════════════════════════╝`;
 
     await respond(pingMessage);
   }

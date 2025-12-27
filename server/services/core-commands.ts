@@ -306,7 +306,18 @@ commandRegistry.register({
     const { respond } = context;
     const startTime = Date.now();
 
-    await respond(`🏓 *Pong!*\n\n⚡ *Response time:* ${Date.now() - startTime}ms\n🤖 *Bot Status:* Online\n✅ *TREKKERMD LIFETIME BOT* is working perfectly!`);
+    const pingMessage = `
+╔════════════════════════════╗
+║ 🏓      PONG DETECTED     🏓 ║
+╠════════════════════════════╣
+║ ⚡ Latency: ${Date.now() - startTime}ms         ║
+║ 🤖 Status: Online          ║
+║ ✅ Bot: TREKKER-MD         ║
+╠════════════════════════════╣
+║ 🔥 Systems Operational!    ║
+╚════════════════════════════╝`;
+
+    await respond(pingMessage);
   }
 });
 
@@ -354,28 +365,20 @@ commandRegistry.register({
     const formattedDate = currentTime.format("DD/MM/YYYY");
 
     const statusInfo = `
-📊 *TREKKERMD LIFETIME BOT STATUS*
-
-🤖 *Bot Information:*
-┃ Status: Online ✅
-┃ Commands: ${commandRegistry.getAllCommands().length}
-┃ Uptime: ${formatUptime(process.uptime())}
-┃ Version: 2.0.0
-
-💻 *System Information:*
-┃ RAM Usage: ${formatMemory(os.totalmem() - os.freemem())}/${formatMemory(os.totalmem())}
-┃ Platform: ${os.platform()}
-┃ Node.js: ${process.version}
-
-⏰ *Time Information:*
-┃ Current Time: ${formattedTime}
-┃ Date: ${formattedDate}
-┃ Timezone: Africa/Nairobi
-
-🌐 *Connection:* Baileys WhatsApp Native
-✅ *All systems operational!*
-
-> ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛʀᴇᴋᴋᴇʀᴍᴅ ᴛᴇᴀᴍ`;
+╔══════════════════════════════════════╗
+║ 📊   TREKKER-MD SYSTEM STATUS   📊   ║
+╠══════════════════════════════════════╣
+║ 🤖 Bot: Online ✅                    ║
+║ 🔧 Commands: ${commandRegistry.getAllCommands().length}                    ║
+║ ⏳ Uptime: ${formatUptime(process.uptime())}        ║
+║ 🚀 Version: 2.0.0                    ║
+╠══════════════════════════════════════╣
+║ 💻 RAM: ${formatMemory(os.totalmem() - os.freemem())}/${formatMemory(os.totalmem())}            ║
+║ 🕰️ Time: ${formattedTime}                 ║
+║ 📅 Date: ${formattedDate}                 ║
+╠══════════════════════════════════════╣
+║ 🔥 All systems operational!         ║
+╚══════════════════════════════════════╝`;
 
     await respond(statusInfo);
   }
