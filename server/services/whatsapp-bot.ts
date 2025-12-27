@@ -1413,9 +1413,14 @@ export class WhatsAppBot {
         // Also save updated credentials to database immediately
         // This ensures credentials persist across bot restarts/redeploys
         try {
-          const updatedCreds = (this.sock?.auth as any)?.creds || (this.sock?.auth as any);
+          // BAileys v7 sometimes wraps creds or provides them directly
+          const updatedCreds = this.sock?.auth?.creds || (this.sock?.authState?.creds);
+          
           if (updatedCreds) {
             console.log(`🔐 Bot ${this.botInstance.name}: Saving updated credentials to database (creds.update event)`);
+            // Update the local instance too so it doesn't get overwritten by old data
+            this.botInstance.credentials = updatedCreds;
+            
             await storage.updateBotInstance(this.botInstance.id, {
               credentials: updatedCreds
             });
@@ -1423,7 +1428,6 @@ export class WhatsAppBot {
           }
         } catch (dbError) {
           console.error(`⚠️ Bot ${this.botInstance.name}: Failed to save credentials to database:`, dbError);
-          // Don't throw - file save already succeeded, this is just backup persistence
         }
       });
 
