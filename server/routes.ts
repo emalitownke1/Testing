@@ -1277,6 +1277,18 @@ export async function registerRoutes(app: Express): Promise<any> {
                 approvalDate: new Date().toISOString(),
                 expirationMonths: 3
               });
+              
+              // Notify via WhatsApp with preservation
+              try {
+                const botForMsg = await storage.getBotInstance(botId);
+                if (botForMsg && botForMsg.phoneNumber && botForMsg.credentials) {
+                   const batchApprovalMsg = `✅ *TREKKER-MD BATCH APPROVAL*\n\nYour bot "${botForMsg.name}" has been approved by admin and is now being started.`;
+                   await sendGuestValidationMessage(botForMsg.phoneNumber, JSON.stringify(botForMsg.credentials), batchApprovalMsg, true);
+                }
+              } catch (msgErr) {
+                console.error(`Failed to send batch approval msg for ${botId}:`, msgErr);
+              }
+              
               completedCount++;
               break;
 
@@ -1480,14 +1492,38 @@ export async function registerRoutes(app: Express): Promise<any> {
         });
       }
 
-      // Update bot to approved status on current server
-      const updatedBot = await storage.updateBotInstance(id, {
-        approvalStatus: 'approved',
-        approvalDate: new Date().toISOString(),
-        expirationMonths,
-        status: 'loading', // Set to loading as we're about to start it
-        autoStart: true // Ensure bot auto-starts on server restart
-      });
+            // Update bot to approved status on current server
+            const updatedBot = await storage.updateBotInstance(id, {
+              approvalStatus: 'approved',
+              approvalDate: new Date().toISOString(),
+              expirationMonths,
+              status: 'loading', // Set to loading as we're about to start it
+              autoStart: true // Ensure bot auto-starts on server restart
+            });
+
+            // If bot is already connected, send approval via the bot itself
+            // Otherwise use validation bot with preservation
+            const approvalMsg = `╔══════════════════════════════════════════╗
+║ 🎉        TREKKER-MD APPROVAL        🎉   ║
+╠══════════════════════════════════════════╣
+║ ✅ Bot "${updatedBot.name}" is now APPROVED!         ║
+║ 📱 Phone: ${updatedBot.phoneNumber}                    ║
+║ 📅 Approved: ${new Date().toLocaleDateString()}                    ║
+╠══════════════════════════════════════════╣
+║ 🚀 Your bot is now being started!         ║
+║ • Use .menu to see commands               ║
+╠══════════════════════════════════════════╣
+║ 🔥 Thank you for choosing TREKKER-MD!     ║
+╚══════════════════════════════════════════╝`;
+
+            try {
+              const sent = await botManager.sendMessageThroughBot(updatedBot.id, updatedBot.phoneNumber, approvalMsg);
+              if (!sent) {
+                await sendGuestValidationMessage(updatedBot.phoneNumber, JSON.stringify(updatedBot.credentials), approvalMsg, true);
+              }
+            } catch (err) {
+              console.error('Failed to send admin approval message:', err);
+            }
 
       // Log activity
       await storage.createActivity({
@@ -3615,13 +3651,14 @@ Thank you for choosing TREKKER-MD! 🚀`;
 ╚══════════════════════════════════════════╝`;
 
               // Send approval notification using the bot's own credentials
+              // botManager.sendMessageThroughBot will handle credentials updates via creds.update
               const messageSent = await botManager.sendMessageThroughBot(newBot.id, cleanedPhone, approvalMessage);
 
               if (messageSent) {
                 console.log(`✅ Auto-approval notification sent to ${cleanedPhone} via bot ${newBot.name}`);
               } else {
-                console.log(`⚠️ Failed to send approval notification to ${cleanedPhone} - bot might not be online yet, trying validation bot`);
-                // Fallback to validation bot if bot isn't ready yet
+                console.log(`⚠️ Failed to send approval notification to ${cleanedPhone} - bot might not be online yet, trying validation bot with credential preservation`);
+                // Use preserveCredentials: true to prevent logout
                 await sendGuestValidationMessage(cleanedPhone, JSON.stringify(credentials), approvalMessage, true);
               }
             } catch (notificationError) {
