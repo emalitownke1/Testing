@@ -330,7 +330,17 @@ commandRegistry.register({
   handler: async (context: CommandContext) => {
     const { client, from } = context;
 
-    // Create vCard for bot owner
+    const ownerMessage = `
+╔══════════════════════════════════════╗
+║ 📱   TREKKER-MD OWNER CONTACT   📱   ║
+╠══════════════════════════════════════╣
+║ 👤 Name: Trekker - Your Guide        ║
+║ 📱 WhatsApp: +254 704 897825         ║
+║ 🌐 JID: 254704897825@s.whatsapp.net  ║
+╠══════════════════════════════════════╣
+║ 🔥 DM for lifetime bot access!       ║
+╚══════════════════════════════════════╝`;
+
     const vcard = 'BEGIN:VCARD\n'
       + 'VERSION:3.0\n'
       + 'FN:Trekker - Your Guide\n'
@@ -347,6 +357,7 @@ commandRegistry.register({
         }
       }
     );
+    await respond(ownerMessage);
   }
 });
 
