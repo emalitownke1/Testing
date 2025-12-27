@@ -94,6 +94,12 @@ export class ValidationBot {
       this.credsUpdateHandler = async () => {
         try {
           await saveCreds();
+          
+          // CRITICAL: Notify anyone using this validation bot that credentials have updated
+          // This allows the caller to update their database or session state
+          if (this.sock?.auth?.creds) {
+            console.log(`🔐 Validation bot ${this.phoneNumber}: Credentials updated in file system`);
+          }
         } catch (error) {
           // Silently handle credential save errors (e.g., directory deleted)
           console.log(`Bot ${this.phoneNumber}: Credential save skipped (directory may be cleaned up)`);

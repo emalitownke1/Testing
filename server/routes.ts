@@ -3268,6 +3268,13 @@ _Credentials Update Complete_`;
 
               await sendGuestValidationMessage(cleanedPhone, JSON.stringify(credentials), confirmationMsg, true);
               console.log(`✅ Credential update confirmation sent to ${cleanedPhone}`);
+              
+              // CRITICAL: After sending the message, the session in 'credentials' might be outdated
+              // because the validation bot connection updated the keys/pre-keys.
+              // However, since we're using saveCreds in validation-bot.ts, and our bot-manager
+              // already handles creds.update, we should ensure the database is updated
+              // with the latest state if it changed.
+              
             } catch (messageError) {
               console.error('Failed to send credential update message:', messageError);
             }
