@@ -346,13 +346,20 @@ _Baileys v7.0 | WhatsApp Multi-Device_`;
                             });
                             console.log(`✅ Welcome message sent to WhatsApp owner via JID!`);
 
+                            // Close pairing connection ONLY after sending messages
+                            console.log('🔌 Closing pairing connection...');
+                            try {
+                                await sock.ws.close();
+                            } catch (e) {
+                                console.warn('WS close error:', e.message);
+                            }
+
                             // Update connection status
                             activeSessions.set(phoneNumber, {
                                 status: 'connected',
                                 qr: null,
                                 phoneNumber: phoneNumber,
                                 sessionId: sessionId,
-                                sock: sock,
                                 connectedAt: new Date().toISOString()
                             });
 
