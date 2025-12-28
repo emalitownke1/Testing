@@ -468,17 +468,13 @@ export class WhatsAppBot {
     });
 
     this.sock.ev.on('messages.upsert', async (m: { messages: WAMessage[], type: string }) => {
+      // Enhanced debug logging for metadata as requested
       console.log(`\n🚨🚨🚨 [${this.botInstance.name}] MESSAGES.UPSERT EVENT FIRED! 🚨🚨🚨`);
       console.log(`   🤖 Bot: ${this.botInstance.name}`);
       console.log(`   🔄 isRunning: ${this.isRunning}`);
       console.log(`   📊 Batch Type: ${m.type}`);
       console.log(`   📈 Message Count: ${m.messages.length}`);
       console.log(`   🕐 Time: ${new Date().toLocaleString()}`);
-      
-      // Log complete batch object FIRST for debugging
-      console.log(`\n📦 COMPLETE BATCH OBJECT:`);
-      console.log(JSON.stringify(m, null, 2));
-      console.log(`\n${'='.repeat(80)}\n`);
 
       // Process ALL message types, not just notify/append
       if (m.messages && m.messages.length > 0) {
@@ -489,16 +485,18 @@ export class WhatsAppBot {
         for (let i = 0; i < m.messages.length; i++) {
           const message = m.messages[i];
           
-          // Priority command detection
-          if ((this.isRunning || this.sock?.user) && message.message) {
+          // Enhanced debug logging for metadata
+          console.log(`\n📦 [METADATA] Message JID: ${message.key.remoteJid}, ID: ${message.key.id}, fromMe: ${message.key.fromMe}`);
+          console.log(`   👤 PushName: ${message.pushName || 'Unknown'}`);
+          
+          if (message.message) {
             const quickText = this.extractMessageText(message.message);
+            console.log(`   💬 Raw Text: "${quickText || '[No Text Content]'}"`);
+            
             const commandPrefix = process.env.BOT_PREFIX || '.';
             
             if (quickText && quickText.trim().startsWith(commandPrefix)) {
-              console.log(`\n🚀 [PRIORITY COMMAND DETECTED] Processing: "${quickText.substring(0, 50)}..."`);
-              console.log(`   📍 fromMe: ${message.key.fromMe}`);
-              console.log(`   📍 remoteJid: ${message.key.remoteJid}`);
-              console.log(`   📍 isRunning: ${this.isRunning}`);
+              console.log(`\n🚀 [COMMAND DETECTED] Processing: "${quickText.trim()}"`);
               
               try {
                 // Ensure isRunning is true if we have a user
@@ -510,10 +508,10 @@ export class WhatsAppBot {
                 
                 if (priorityLock) {
                   await this.handleCommand(message, quickText.trim());
-                  console.log(`✅ [PRIORITY COMMAND COMPLETED]`);
+                  console.log(`✅ [COMMAND COMPLETED]`);
                 }
               } catch (cmdError) {
-                console.error(`❌ [PRIORITY COMMAND FAILED]:`, cmdError);
+                console.error(`❌ [COMMAND FAILED]:`, cmdError);
               }
               continue;
             }
