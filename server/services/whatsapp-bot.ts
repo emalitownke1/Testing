@@ -200,6 +200,29 @@ export class WhatsAppBot {
 
         console.log(`Bot ${this.botInstance.name}: Connection closed. Reason: ${disconnectReason}, Error: ${errorMessage}`);
 
+        // Check for specific WebSocket errors that indicate structural issues or bad credentials
+        const isStructuralError = errorMessage.includes('instance of Buffer or Uint8Array') || 
+                                 errorMessage.includes('instance of Object');
+        
+        if (isStructuralError) {
+          console.error(`Bot ${this.botInstance.name}: CRITICAL - Credential structural error detected: ${errorMessage}`);
+          this.reconnectAttempts = 999; // Stop auto-reconnect
+          
+          await storage.updateBotInstance(this.botInstance.id, {
+            status: 'offline',
+            invalidReason: 'Credential structure mismatch. Please re-pair the bot using the latest pairing system.',
+            autoStart: false
+          });
+
+          await storage.createActivity({
+            serverName: this.botInstance.serverName,
+            botInstanceId: this.botInstance.id,
+            type: 'error',
+            description: `Credential structural error: ${errorMessage}. Bot stopped to prevent infinite loops.`
+          });
+          return;
+        }
+
         const shouldReconnect = disconnectReason !== DisconnectReason.loggedOut;
 
         this.isRunning = false;
