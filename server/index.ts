@@ -52,62 +52,28 @@ async function startMonitoringOnce() {
 // Scheduled bot monitoring function
 async function startScheduledBotMonitoring() {
   try {
-    console.log('🕒 Starting scheduled bot monitoring (every 3 minutes)');
-
     const { storage } = await import('./storage');
     const { botManager } = await import('./services/bot-manager');
 
-    console.log('✅ Scheduled monitoring imports loaded successfully');
+    const checkApprovedBots = async () => {
+      try {
+        const approvedBots = await storage.getApprovedBots();
+        if (!approvedBots || approvedBots.length === 0) return;
 
-  const checkApprovedBots = async () => {
-    try {
-      // Get ALL approved bots for this server - includes existing and newly approved bots
-      const approvedBots = await storage.getApprovedBots();
+        console.log(`🔍 Checking ${approvedBots.length} approved bot(s)...`);
 
-      if (!approvedBots || approvedBots.length === 0) {
-        console.log('ℹ️ No approved bots found to monitor');
-        return;
+        // Start all offline approved bots concurrently
+        await Promise.all(
+          approvedBots.map(bot => botManager.startBot(bot.id))
+        );
+      } catch (error) {
+        console.error('Monitoring error:', error);
       }
+    };
 
-      console.log(`🔍 Monitoring: Checking ${approvedBots.length} approved bot(s) - Starting ALL bots concurrently...`);
-
-      // Start ALL bots concurrently instead of sequentially
-      const botPromises = approvedBots.map(async (bot) => {
-        try {
-          const existingBot = botManager.getBot(bot.id);
-          const isOnline = existingBot?.getStatus() === 'online';
-          const isError = bot.status === 'error';
-
-          if (isError && bot.invalidReason && !bot.invalidReason.includes('401')) {
-            console.log(`🔄 Auto-restarting bot ${bot.name} (${bot.id}) from error state`);
-            return await botManager.restartBot(bot.id);
-          }
-
-          if (!existingBot || !isOnline) {
-            console.log(`🚀 Auto-starting bot ${bot.name} (${bot.id}) concurrently`);
-            return await botManager.startBot(bot.id);
-          } else {
-            console.log(`   ✓ Bot ${bot.name} already online`);
-          }
-        } catch (error) {
-          console.error(`❌ Failed to start bot ${bot.id}:`, error);
-        }
-      });
-
-      // Wait for all bots to start/restart in parallel
-      await Promise.all(botPromises);
-    } catch (error) {
-      // Log but don't crash - monitoring should be resilient
-      console.error('❌ Monitoring check failed:', error);
-      console.log(`✅ Server continues running despite monitoring error`);
-    }
-  };
-
-  // Initial check immediately (fastest startup)
-  setImmediate(checkApprovedBots);
-
-  // Schedule checks every 5 minutes (300000ms)
-  setInterval(checkApprovedBots, 300000);
+    // Check immediately then every 3 minutes
+    setImmediate(checkApprovedBots);
+    setInterval(checkApprovedBots, 180000);
 
     // Server heartbeat - update lastActive every 30 minutes
     const updateServerHeartbeat = async () => {

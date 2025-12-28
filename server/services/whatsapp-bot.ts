@@ -65,20 +65,9 @@ export class WhatsAppBot {
     this.store = null;
     console.log(`Bot ${this.botInstance.name}: Using antidelete service for message storage`);
 
-    // CRITICAL: Restore credentials on server restart
-    // If credentials exist in database but creds.json doesn't exist yet, save them
+    // Restore credentials if needed (server restart scenario)
     const credsFilePath = join(this.authDir, 'creds.json');
-    const credsFileExists = existsSync(credsFilePath);
-
-    if (!credsFileExists && botInstance.credentials) {
-      // Credentials exist in database but not on disk - restore them
-      // This happens on server restart when session files are preserved
-      console.log(`🔄 Bot ${this.botInstance.name}: RESTORING CREDENTIALS from database (server restart scenario)`);
-      this.saveCredentialsToAuthDir(botInstance.credentials);
-    } else if (credsFileExists) {
-      console.log(`✅ Bot ${this.botInstance.name}: Existing session credentials found on disk - using preserved session`);
-    } else if (botInstance.credentials) {
-      // Credentials provided but file exists - update to latest
+    if (!existsSync(credsFilePath) && botInstance.credentials) {
       this.saveCredentialsToAuthDir(botInstance.credentials);
     }
   }

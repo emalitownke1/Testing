@@ -122,119 +122,67 @@ class BotManager {
         this.loadSkipData();
       }
 
-      // Check if bot should be skipped due to repeated failures
+      // Skip bots that failed 2+ times (require manual intervention)
       if (this.shouldSkipBot(botId)) {
-        console.log(`⏭️ BotManager: Skipping bot ${botId} (failed 2+ times, requires manual intervention)`);
         return;
       }
 
-      // STEP 1: Load bot from database
+      // Load bot instance from database
       const botInstance = await storage.getBotInstance(botId);
       if (!botInstance) {
-        console.error(`BotManager: Bot with ID ${botId} not found in database`);
-        return; // Don't throw - just skip this bot
-      }
-
-      // STEP 2: Only approved bots can auto-start
-      if (botInstance.approvalStatus !== 'approved') {
-        console.log(`BotManager: Bot ${botId} (${botInstance.name}) is not approved (status: ${botInstance.approvalStatus}), skipping auto-start`);
+        console.error(`Bot ${botId} not found in database`);
         return;
       }
 
-      console.log(`\n${'='.repeat(80)}`);
-      console.log(`🚀 [CONTAINER ISOLATION] Starting bot ${botId} in isolated container`);
-      console.log(`   Bot Name: ${botInstance.name}`);
-      console.log(`   Server: ${botInstance.serverName}`);
-      console.log(`   Container Path: auth/${botInstance.serverName}/bot_${botId}`);
-      console.log(`   Has Credentials: ${!!botInstance.credentials}`);
-      console.log(`${'='.repeat(80)}\n`);
+      // Only approved bots auto-start
+      if (botInstance.approvalStatus !== 'approved') {
+        return;
+      }
 
-      // Check if bot is already running
+      // Skip if already online
       const existingBot = this.bots.get(botId);
-      const currentStatus = existingBot?.getStatus();
-
-      if (existingBot && currentStatus === 'online') {
-        console.log(`BotManager: Bot ${botId} (${botInstance.name}) is already online in container`);
-        // Reset failures since bot is running
+      if (existingBot?.getStatus() === 'online') {
         this.resetBotFailures(botId);
         return;
       }
 
-      // Stop existing bot if it exists and is not online
-      if (existingBot && currentStatus !== 'online') {
-        console.log(`BotManager: Stopping previous bot instance (status: ${currentStatus})`);
+      // Stop existing bot instance if offline
+      if (existingBot) {
         try {
           await existingBot.stop();
-        } catch (stopError) {
-          console.error(`BotManager: Error stopping existing bot ${botId}:`, stopError);
+        } catch (e) {
+          // Silently fail
         }
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
         this.bots.delete(botId);
       }
 
-      // STEP 3: Reload bot instance from database to get latest settings
-      const freshBotInstance = await storage.getBotInstance(botId);
-      if (!freshBotInstance) {
-        console.error(`BotManager: Bot ${botId} disappeared from database during start`);
-        return;
-      }
-
-      // STEP 4: Verify credentials are available for session restoration
-      if (freshBotInstance.credentials) {
-        console.log(`BotManager: 🔐 [SESSION RESTORATION] Found credentials in database for bot ${botId}`);
-        console.log(`BotManager:    Credentials will be restored to creds.json if server restarted`);
-      } else {
-        console.log(`BotManager: ⚠️ No credentials in database - bot ${botId} will require QR code pairing`);
-      }
-
-      // STEP 5: PRESERVE existing session files
-      // This allows bots to resume using their existing authenticated session
-      // Structure: auth/{serverName}/bot_{botId}/creds.json + session files
-      console.log(`BotManager: 🔄 [CONTAINER ISOLATION] Preparing bot instance with session restoration capability`);
-      console.log(`BotManager:    If creds.json exists on disk, Baileys will use it immediately`);
-      console.log(`BotManager:    If creds.json missing but in database, it will be restored automatically`);
-
-      // STEP 6: Create new WhatsAppBot instance in isolated container
-      // The constructor will automatically restore credentials from database if creds.json doesn't exist
-      // This handles the server restart scenario where session files are preserved
-      const newBot = new WhatsAppBot(freshBotInstance);
+      // Create and start bot instance
+      const newBot = new WhatsAppBot(botInstance);
       this.bots.set(botId, newBot);
-      console.log(`BotManager: 📦 Created new bot instance in isolated container`);
-
-      // STEP 7: Start the bot (connects to WhatsApp using saved session or QR)
-      // ✅ CREDENTIALS HAVE BEEN UPDATED FROM DATABASE BEFORE BOT STARTS
-      console.log(`BotManager: 🔗 Starting connection for bot ${botId}...`);
+      
+      console.log(`🚀 Starting bot: ${botInstance.name} (${botId})`);
       await newBot.start();
 
-      // Check if bot actually started
       if (newBot.getStatus() === 'online') {
-        console.log(`✅ BotManager: Bot ${botId} (${freshBotInstance.name}) started successfully in isolated container`);
-        console.log(`✅ BotManager: Container isolation verified - bot running independently\n`);
-        // Reset failures on successful start
+        console.log(`✅ Bot online: ${botInstance.name}`);
         this.resetBotFailures(botId);
-      } else {
-        console.log(`⚠️ BotManager: Bot ${botId} start initiated, waiting for connection...`);
       }
 
     } catch (error) {
-      console.error(`❌ BotManager: Failed to start bot ${botId}:`, error);
+      console.error(`Failed to start bot ${botId}:`, error);
 
-      // Clean up failed bot
+      // Clean up
       const failedBot = this.bots.get(botId);
       if (failedBot) {
         try {
           await failedBot.stop();
-        } catch (stopError) {
-          console.error(`BotManager: Failed to stop failed bot ${botId}:`, stopError);
+        } catch (e) {
+          // Silently fail
         }
         this.bots.delete(botId);
       }
 
-      // Record failure for monitoring (will skip after 2 failures)
       this.recordBotFailure(botId);
-
-      // NEVER throw - server must continue running
-      console.log(`✅ Server continues running despite bot ${botId} failure`);
     }
   }
 
