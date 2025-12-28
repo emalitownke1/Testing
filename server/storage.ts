@@ -287,11 +287,11 @@ export class DatabaseStorage implements IStorage {
     const [botInstance] = await db
       .update(botInstances)
       .set({ ...updates, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(and(eq(botInstances.id, id), eq(botInstances.serverName, serverName)))
+      .where(eq(botInstances.id, id))
       .returning();
 
     if (!botInstance) {
-      throw new Error(`Bot ${id} not found on server ${serverName} or access denied`);
+      throw new Error(`Bot ${id} not found or access denied`);
     }
 
     return botInstance;

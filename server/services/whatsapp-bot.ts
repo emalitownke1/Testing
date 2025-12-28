@@ -199,32 +199,23 @@ export class WhatsAppBot {
       }
 
       if (connection === 'close') {
-        const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-        const disconnectReason = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const disconnectError = lastDisconnect?.error as Boom;
+        const disconnectReason = disconnectError?.output?.statusCode;
         const errorMessage = (lastDisconnect?.error as Error)?.message || 'Unknown error';
+
+        console.log(`Bot ${this.botInstance.name}: Connection closed. Reason: ${disconnectReason}, Error: ${errorMessage}`);
+
+        const shouldReconnect = disconnectReason !== DisconnectReason.loggedOut;
 
         this.isRunning = false;
         this.stopPresenceAutoSwitch();
 
-        // Check for conflict errors (440 - multiple simultaneous connections)
-        const isConflictError = disconnectReason === 440 || errorMessage.includes('conflict');
-
-        if (isConflictError) {
-          this.reconnectAttempts = 999; // Stop auto-reconnect
-
-          await storage.updateBotInstance(this.botInstance.id, {
-            status: 'offline',
-            invalidReason: 'Conflict: Another instance of this bot is already connected. Please ensure only one instance is running.',
-            autoStart: false
-          });
-
-          await storage.createActivity({
-            serverName: this.botInstance.serverName,
-            botInstanceId: this.botInstance.id,
-            type: 'error',
-            description: 'Connection conflict (440) - multiple instances detected. Bot stopped.'
-          });
-          return;
+        // If it's a stale session/conflict, we still want to try reconnecting but with a fresh session
+        const isStaleSession = errorMessage.includes('Closing stale open session') || disconnectReason === 440;
+        
+        if (isStaleSession) {
+          console.log(`Bot ${this.botInstance.name}: Stale session detected, attempting fresh connection...`);
+          this.reconnectAttempts = 0; // Reset for fresh start
         }
 
         // Check for 428 errors (Connection Closed / Precondition Required)
