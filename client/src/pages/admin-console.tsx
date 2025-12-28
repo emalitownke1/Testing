@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Play, Square, Trash2, Shield, Activity, Bot, Users, BarChart3, LogOut, Gift } from "lucide-react";
+import { Play, Square, Trash2, Shield, Activity, Bot, Users, BarChart3, LogOut, Gift, Smartphone, Key, Send } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { BotInstance, Activity as ActivityType } from "@shared/schema";
 import MasterControlPanel from "@/components/master-control-panel";
@@ -23,6 +23,8 @@ export default function AdminConsole() {
   const { logout } = useAuth();
   const [showMasterControl, setShowMasterControl] = useState(false);
   const [showServerConfig, setShowServerConfig] = useState(false);
+  const [guestPhoneInput, setGuestPhoneInput] = useState("");
+  const [guestSession, setGuestSession] = useState<any>(null);
 
   // Fetch all bot instances
   const { data: botInstances = [], isLoading: loadingBots } = useQuery({
@@ -135,6 +137,71 @@ export default function AdminConsole() {
     },
   });
 
+  // Guest Management Mutations
+  const getSessionMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      const cleanedPhone = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+      const response = await fetch(`/api/guest/session/${cleanedPhone}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        },
+      });
+      if (!response.ok) throw new Error("Failed to retrieve session");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setGuestSession(data);
+      toast({ title: "Session retrieved successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to retrieve guest session", variant: "destructive" });
+    },
+  });
+
+  const checkRegistrationMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      const cleanedPhone = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+      const response = await fetch("/api/guest/check-registration", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        },
+        body: JSON.stringify({ phoneNumber: cleanedPhone }),
+      });
+      if (!response.ok) throw new Error("Failed to check registration");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Registration status retrieved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to check registration", variant: "destructive" });
+    },
+  });
+
+  const sendOTPMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      const cleanedPhone = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+      const response = await fetch("/api/guest/auth/send-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        },
+        body: JSON.stringify({ phoneNumber: cleanedPhone }),
+      });
+      if (!response.ok) throw new Error("Failed to send OTP");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "OTP sent successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to send OTP", variant: "destructive" });
+    },
+  });
+
   const getStatusBadge = (status: string) => {
     const variants = {
       online: "default",
@@ -236,6 +303,7 @@ export default function AdminConsole() {
         <TabsList>
           <TabsTrigger value="overview" data-testid="tab-overview">Server Overview</TabsTrigger>
           <TabsTrigger value="bots" data-testid="tab-bots">Bot Management</TabsTrigger>
+          <TabsTrigger value="guest" data-testid="tab-guest">Guest Management</TabsTrigger>
           <TabsTrigger value="activities" data-testid="tab-activities">Recent Activity</TabsTrigger>
           <TabsTrigger value="server" data-testid="tab-server">Server Config</TabsTrigger>
           <TabsTrigger value="offer" data-testid="tab-offer">
@@ -353,6 +421,101 @@ export default function AdminConsole() {
                     ))}
                   </TableBody>
                 </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Guest Management Tab */}
+        <TabsContent value="guest" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Smartphone className="h-5 w-5" />
+                Guest Session Management
+              </CardTitle>
+              <CardDescription>
+                Manage guest bot sessions, retrieve credentials, and send OTPs
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Phone Number Input */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Enter Guest Phone Number</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter phone number (e.g., 254704897825)"
+                    value={guestPhoneInput}
+                    onChange={(e) => setGuestPhoneInput(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    data-testid="input-guest-phone"
+                  />
+                </div>
+              </div>
+
+              {/* Guest Actions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Button
+                  onClick={() => getSessionMutation.mutate(guestPhoneInput)}
+                  disabled={!guestPhoneInput || getSessionMutation.isPending}
+                  className="flex items-center gap-2"
+                  data-testid="button-get-session"
+                >
+                  <Key className="h-4 w-4" />
+                  Get Session
+                </Button>
+                
+                <Button
+                  onClick={() => checkRegistrationMutation.mutate(guestPhoneInput)}
+                  disabled={!guestPhoneInput || checkRegistrationMutation.isPending}
+                  variant="outline"
+                  className="flex items-center gap-2"
+                  data-testid="button-check-registration"
+                >
+                  <Smartphone className="h-4 w-4" />
+                  Check Registration
+                </Button>
+
+                <Button
+                  onClick={() => sendOTPMutation.mutate(guestPhoneInput)}
+                  disabled={!guestPhoneInput || sendOTPMutation.isPending}
+                  variant="secondary"
+                  className="flex items-center gap-2"
+                  data-testid="button-send-otp"
+                >
+                  <Send className="h-4 w-4" />
+                  Send OTP
+                </Button>
+              </div>
+
+              {/* Session Display */}
+              {guestSession && (
+                <div className="border rounded-lg p-4 bg-muted/30">
+                  <h4 className="font-medium mb-3">Retrieved Session</h4>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Session ID:</span>
+                      <p className="font-mono text-xs bg-background p-2 rounded mt-1 break-all max-h-24 overflow-y-auto" data-testid="text-session-id">
+                        {guestSession.sessionId?.substring(0, 100)}...
+                      </p>
+                    </div>
+                    {guestSession.pairingCode && (
+                      <div>
+                        <span className="text-muted-foreground">Pairing Code:</span>
+                        <p className="font-mono text-sm bg-background p-2 rounded mt-1" data-testid="text-pairing-code">
+                          {guestSession.pairingCode}
+                        </p>
+                      </div>
+                    )}
+                    {guestSession.createdAt && (
+                      <div>
+                        <span className="text-muted-foreground">Created:</span>
+                        <p data-testid="text-session-created">{formatDate(guestSession.createdAt)}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
