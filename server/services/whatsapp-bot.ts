@@ -79,18 +79,13 @@ export class WhatsAppBot {
       // Detect credential format and extract the creds object for creds.json
       let credsContent = credentials;
 
-      // Check if this is v7 format (fields at root level)
-      const isV7Format = credentials.noiseKey && credentials.signedIdentityKey && !credentials.creds;
-
-      // Check if this is already in wrapped format (fields under creds)
-      const isWrappedFormat = credentials.creds?.noiseKey;
-
-      if (isWrappedFormat) {
-        // Already wrapped - extract the creds content for the file
+      // Handle wrapped format (fields under creds) - usually from database/session ID
+      if (credentials.creds && typeof credentials.creds === 'object') {
         credsContent = credentials.creds;
         console.log(`Bot ${this.botInstance.name}: Extracting creds from wrapped format`);
-      } else if (isV7Format) {
-        // V7 format at root - already in correct format for creds.json
+      } 
+      // Handle v7 format (fields at root level)
+      else if (credentials.noiseKey && credentials.signedIdentityKey) {
         console.log(`Bot ${this.botInstance.name}: Using v7 credentials directly for creds.json`);
         // credentials is already in the right format
       }

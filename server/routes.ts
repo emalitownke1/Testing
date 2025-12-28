@@ -509,74 +509,49 @@ export async function registerRoutes(app: Express): Promise<any> {
         });
       }
 
-      // Basic validation of credentials structure
-      if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials)) {
+      // Detect and normalize credentials if needed
+      // If it's v7 format (noiseKey at root), we'll keep it as is for storage 
+      // but ensure it's not wrapped in unnecessary layers
+      let processedCredentials = credentials;
+      
+      const isV7Format = credentials.noiseKey && credentials.signedIdentityKey;
+      const isWrappedFormat = credentials.creds && typeof credentials.creds === 'object';
+
+      if (!isV7Format && !isWrappedFormat) {
         return res.status(400).json({
           message: "❌ Invalid credentials format. Please upload a valid WhatsApp session file."
         });
       }
 
-      // Detect and normalize v7 format (fields at root) to expected format (wrapped in creds)
-      const isV7Format = credentials.noiseKey && credentials.signedIdentityKey && !credentials.creds;
-
-      if (isV7Format) {
-        console.log('🔧 Detected Baileys v7 format credentials, wrapping in creds object');
-        credentials = {
-          creds: credentials,
-          keys: {}
-        };
-      }
-
+      // Extract phone number from credentials for validation
+      let credsToValidate = isWrappedFormat ? credentials.creds : credentials;
+      
       // Check required fields for WhatsApp credentials
-      const missingFields = [];
-
-      // Check top-level creds object
-      if (!credentials.creds || typeof credentials.creds !== 'object') {
-        missingFields.push('creds');
-      } else {
-        // Check nested fields inside credentials.creds
-        const requiredNestedFields = ['noiseKey', 'signedIdentityKey', 'signedPreKey', 'registrationId'];
-        for (const field of requiredNestedFields) {
-          if (!credentials.creds[field]) {
-            missingFields.push(`creds.${field}`);
-          }
-        }
-      }
+      const requiredFields = ['noiseKey', 'signedIdentityKey', 'signedPreKey', 'registrationId'];
+      const missingFields = requiredFields.filter(field => !credsToValidate[field]);
 
       if (missingFields.length > 0) {
         return res.status(400).json({
-          message: `❌ Missing required fields in credentials: ${missingFields.join(', ')}. Please ensure you're using a complete WhatsApp session file with proper nested structure.`
+          message: `❌ Missing required fields in credentials: ${missingFields.join(', ')}. Please ensure you're using a complete WhatsApp session file.`
         });
       }
 
       // Validate phone number ownership if provided
       const phoneNumber = req.body.phoneNumber;
-      if (phoneNumber && credentials.creds?.me?.id) {
-        const credentialsPhone = credentials.creds.me.id.match(/^(\d+):/)?.[1];
+      if (phoneNumber && credsToValidate.me?.id) {
+        const credentialsPhone = credsToValidate.me.id.match(/^(\d+)/)?.[1];
         const providedPhoneNormalized = phoneNumber.replace(/\D/g, '');
 
-        if (credentialsPhone && providedPhoneNormalized) {
-          if (credentialsPhone !== providedPhoneNormalized) {
-            return res.status(400).json({
-              message: `❌ Phone number mismatch. The credentials belong to +${credentialsPhone} but you provided +${providedPhoneNormalized}. Please use the correct credentials for your phone number.`
-            });
-          }
-        }
-      }
-
-      // Check file size (for file uploads)
-      if (credentialType === 'file' && req.file) {
-        const fileSizeKB = req.file.buffer.length / 1024;
-        if (fileSizeKB < 0.01 || fileSizeKB > 5120) { // 10 bytes to 5MB
+        if (credentialsPhone && providedPhoneNormalized && credentialsPhone !== providedPhoneNormalized) {
           return res.status(400).json({
-            message: `❌ Invalid file size (${fileSizeKB.toFixed(2)} KB). Credentials file should be between 10 bytes and 5MB.`
+            message: `❌ Phone number mismatch. The credentials belong to +${credentialsPhone} but you provided +${providedPhoneNormalized}.`
           });
         }
       }
 
       // Check if phone number from credentials already exists in database (cross-server search)
       const { validateCredentialsByPhoneNumber } = await import('./services/creds-validator');
-      const phoneValidation = await validateCredentialsByPhoneNumber(credentials);
+      const phoneValidation = await validateCredentialsByPhoneNumber(processedCredentials);
 
       if (!phoneValidation.isValid) {
         return res.status(400).json({
