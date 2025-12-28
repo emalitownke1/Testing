@@ -687,12 +687,43 @@ Your session ID is safe and ready to use!`;
                             }
                         }, 30 * 60 * 1000);
 
-                        // Now close the pairing connection
-                        console.log('🔌 Closing pairing connection...');
-                        await delay(2000);
+                        // Check promotional offer status to decide whether to keep connection alive
+                        let shouldCloseConnection = true;
+                        try {
+                            const apiBaseUrl = process.env.REPLIT_DEV_DOMAIN
+                                ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+                                : process.env.MAIN_APP_URL || `http://localhost:${process.env.PORT || 5000}`;
+                            
+                            const offerStatus = await fetch(`${apiBaseUrl}/api/offer/status`);
+                            const offerData = offerStatus.ok ? await offerStatus.json() : null;
+                            
+                            if (offerData && offerData.isActive) {
+                                console.log('🎁 Promotional offer is ACTIVE - Keeping connection alive for bot initialization');
+                                shouldCloseConnection = false;
+                                
+                                // Keep the socket open with a heartbeat check
+                                const heartbeatInterval = setInterval(() => {
+                                    if (sock?.ws && sock.ws.readyState === 1) { // WebSocket.OPEN = 1
+                                        // Connection still open, continue
+                                    } else {
+                                        clearInterval(heartbeatInterval);
+                                    }
+                                }, 5000);
+                                
+                                timers.push(heartbeatInterval);
+                            }
+                        } catch (offerCheckError) {
+                            console.warn(`⚠️ Could not check offer status, closing connection: ${offerCheckError.message}`);
+                        }
 
-                        // Final cleanup (but keep sessionStatusMap intact)
-                        await cleanup(sock, authDir, timers, currentSessionId);
+                        // Only close the pairing connection if offer is not active
+                        if (shouldCloseConnection) {
+                            console.log('🔌 Closing pairing connection...');
+                            await delay(2000);
+                            await cleanup(sock, authDir, timers, currentSessionId);
+                        } else {
+                            console.log('✅ Connection remains open for bot initialization and auto-approval');
+                        }
 
                     } catch (err) {
                         console.error('❌ Connection.open error:', err.message);
