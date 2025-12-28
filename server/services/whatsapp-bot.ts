@@ -140,6 +140,10 @@ export class WhatsAppBot {
     return undefined;
   }
 
+  public getSock() {
+    return this.sock;
+  }
+
   private resolvePresenceMode(): 'available' | 'composing' | 'recording' | 'unavailable' | null {
     if (this.botInstance.alwaysOnline) {
       return 'available';

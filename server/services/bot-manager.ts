@@ -304,8 +304,9 @@ class BotManager {
     try {
       // Format phone number as WhatsApp JID
       const jid = phoneNumber.includes('@') ? phoneNumber : `${phoneNumber}@s.whatsapp.net`;
-      if (bot.sock && typeof bot.sock.sendMessage === 'function') {
-        await bot.sock.sendMessage(jid, { text: message });
+      const sock = bot.getSock();
+      if (sock && typeof sock.sendMessage === 'function') {
+        await sock.sendMessage(jid, { text: message });
         return true;
       } else {
         console.error(`Bot ${botId} socket is not initialized or sendMessage is not a function`);
