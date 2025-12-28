@@ -2363,11 +2363,19 @@ commandRegistry.register({
       }
 
       console.log(`🔍 [GetViewOnce] Attempting recovery for message ID: ${quotedMessageId}`);
-      console.log(`🔍 [GetViewOnce] Quoted message structure:`, JSON.stringify(quotedMessage, null, 2));
 
       // Import antidelete service to check stored messages
-      const { antideleteService } = await import('./antidelete.js');
-      const storedMessage = antideleteService.getStoredMessage(quotedMessageId);
+      const { getAntideleteService } = await import('./antidelete.js');
+      const storageModule = await import('../storage.js');
+      const botInstance = await storageModule.storage.getBotInstance(context.botId || '');
+      
+      if (!botInstance) {
+        await respond('❌ Bot instance not found');
+        return;
+      }
+      
+      const antideleteService = getAntideleteService(botInstance);
+      const storedMessage = antideleteService.getStoredMessage(quotedMessageId!);
 
       if (storedMessage && storedMessage.mediaPath) {
         await respond(`📁 *ViewOnce Recovery Attempt*\n\n✅ Found stored media for message ID: ${quotedMessageId}\n📂 Media Type: ${storedMessage.mediaType}\n📍 Path: ${storedMessage.mediaPath}\n⏰ Original Time: ${new Date(storedMessage.timestamp).toLocaleString()}`);

@@ -498,29 +498,32 @@ export class WhatsAppBot {
         for (let i = 0; i < m.messages.length; i++) {
           const message = m.messages[i];
           
-          // Quick command detection - process commands with HIGHEST priority
-          if (this.isRunning && message.message) {
+          // Priority command detection
+          if ((this.isRunning || this.sock?.user) && message.message) {
             const quickText = this.extractMessageText(message.message);
             const commandPrefix = process.env.BOT_PREFIX || '.';
             
             if (quickText && quickText.trim().startsWith(commandPrefix)) {
-              console.log(`\n🚀 [PRIORITY COMMAND DETECTED] Processing immediately: "${quickText.substring(0, 50)}..."`);
+              console.log(`\n🚀 [PRIORITY COMMAND DETECTED] Processing: "${quickText.substring(0, 50)}..."`);
+              console.log(`   📍 fromMe: ${message.key.fromMe}`);
+              console.log(`   📍 remoteJid: ${message.key.remoteJid}`);
+              console.log(`   📍 isRunning: ${this.isRunning}`);
               
               try {
-                // Check if this message is already being handled to prevent duplicate
-                // Use bot isolation service with a specific prefix for priority handling
-                const priorityLock = botIsolationService.acquireCommandLock(`${this.botInstance.id}_priority`, message.key.id || '');
+                // Ensure isRunning is true if we have a user
+                if (this.sock?.user) this.isRunning = true;
+                
+                // Use bot isolation service with a unique key for priority commands
+                const lockKey = `cmd_${message.key.id}`;
+                const priorityLock = botIsolationService.acquireCommandLock(this.botInstance.id, lockKey);
+                
                 if (priorityLock) {
                   await this.handleCommand(message, quickText.trim());
-                  console.log(`✅ [PRIORITY COMMAND COMPLETED] Command processed successfully\n`);
-                } else {
-                  console.log(`   ⏭️ Priority command already being handled for message: ${message.key.id}`);
+                  console.log(`✅ [PRIORITY COMMAND COMPLETED]`);
                 }
               } catch (cmdError) {
                 console.error(`❌ [PRIORITY COMMAND FAILED]:`, cmdError);
               }
-              
-              // Skip all other processing for command messages
               continue;
             }
           }
