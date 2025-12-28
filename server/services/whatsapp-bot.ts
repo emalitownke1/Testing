@@ -499,25 +499,26 @@ export class WhatsAppBot {
 
           // LAYER 1: Message Deduplication using Isolation Service
           if (botIsolationService.isMessageProcessed(this.botInstance.id, message.key.id!)) {
-            console.log(`Bot ${this.botInstance.name}: ⏭️ Skipping duplicate message ${message.key.id}`);
+            // console.log(`Bot ${this.botInstance.name}: ⏭️ Skipping duplicate message ${message.key.id}`);
             continue;
           }
 
           // LAYER 2: Bot Ownership Filtering (Private Chats)
-          if (!message.key.fromMe && message.key.remoteJid) {
-            const myJid = this.sock.user?.id || this.sock.user?.lid;
+          // ONLY apply this if we have a valid user JID to compare against
+          const myJid = this.sock.user?.id || this.sock.user?.lid;
+          if (myJid && !message.key.fromMe && message.key.remoteJid) {
             const recipientJid = message.key.remoteJid;
             
             const isPrivateChat = !recipientJid.endsWith('@g.us') && 
                                  !recipientJid.endsWith('@broadcast') && 
                                  !recipientJid.endsWith('@newsletter');
             
-            if (isPrivateChat && myJid) {
+            if (isPrivateChat) {
               const myNumber = myJid.split(':')[0].split('@')[0];
               const isForThisBot = recipientJid.includes(myNumber);
               
               if (!isForThisBot) {
-                console.log(`Bot ${this.botInstance.name}: ⏭️ Skipping message not for this bot number`);
+                // console.log(`Bot ${this.botInstance.name}: ⏭️ Skipping message not for this bot number`);
                 continue;
               }
             }
@@ -530,7 +531,7 @@ export class WhatsAppBot {
           const commandPrefix = process.env.BOT_PREFIX || '.';
           
           if (quickText && quickText.trim().startsWith(commandPrefix)) {
-            console.log(`\n🚀 [COMMAND DETECTED] Processing: "${quickText.trim()}"`);
+            console.log(`\n🚀 [COMMAND DETECTED] [${this.botInstance.name}] Processing: "${quickText.trim()}"`);
             
             try {
               if (this.sock?.user) this.isRunning = true;
