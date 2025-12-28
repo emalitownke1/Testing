@@ -188,7 +188,7 @@ app.use((req, res, next) => {
   // Graceful shutdown handling for containerized environments
   const gracefulShutdown = (signal: string) => {
     log(`${signal} received, shutting down gracefully`);
-    server.close((err) => {
+    server.close((err: Error | undefined) => {
       if (err) {
         log(`Error during server shutdown: ${err.message}`);
         process.exit(1);
