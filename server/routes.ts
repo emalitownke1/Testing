@@ -3252,42 +3252,18 @@ _Cross-Server Update Complete_`;
 
             console.log(`✅ Credentials updated for existing bot ${updatedBot.name}`);
 
-            // Send WhatsApp confirmation
+            // Save credentials directly to credentialsManager (NO TEMPORARY VALIDATION CONNECTION)
             try {
-              const statusMessage = updatedBot.approvalStatus === 'approved'
-                ? '✅ APPROVED & ACTIVE'
-                : '⏳ Pending Admin Approval';
-
-              const confirmationMsg = `✅ *CREDENTIALS UPDATED!*
-
-Your bot "${updatedBot.name}" credentials have been successfully updated!
-
-📊 *Bot Details:*
-• Bot Name: ${updatedBot.name}
-• Phone: ${cleanedPhone}
-• Status: ${statusMessage}
-• Server: ${currentServer}
-• Updated: ${new Date().toLocaleString()}
-
-${updatedBot.approvalStatus === 'approved'
-  ? '🎉 Your bot is APPROVED and will auto-start with new credentials!\n• Send .menu to see available commands\n• All features are active and ready to use!'
-  : '⏳ Your bot is awaiting admin approval\n• You will be notified once approved\n• Contact +254704897825 for faster activation'}
-
-━━━━━━━━━━━━━━━━━━━
-_Credentials Update Complete_`;
-
-              await sendGuestValidationMessage(cleanedPhone, JSON.stringify(credentials), confirmationMsg, true);
-              console.log(`✅ Credential update confirmation sent to ${cleanedPhone}`);
-              
-              // CRITICAL: After sending the message, the session in 'credentials' might be outdated
-              // because the validation bot connection updated the keys/pre-keys.
-              // However, since we're using saveCreds in validation-bot.ts, and our bot-manager
-              // already handles creds.update, we should ensure the database is updated
-              // with the latest state if it changed.
-              
-            } catch (messageError) {
-              console.error('Failed to send credential update message:', messageError);
+              const { credentialsManager } = await import('./services/credentials-manager');
+              await credentialsManager.saveCredentials(updatedBot, credentials);
+              console.log(`💾 Credentials saved to local storage for bot ${updatedBot.id}`);
+            } catch (storageError) {
+              console.error('Failed to save credentials to local storage:', storageError);
             }
+
+            // NOTE: Removed temporary validation connection that was breaking credentials
+            // Bot will naturally validate credentials when it starts/restarts
+            // No sending validation messages that establish temporary connections
 
             // Restart approved bots immediately with new credentials
             if (updatedBot.approvalStatus === 'approved') {
@@ -3459,8 +3435,10 @@ Thank you for choosing TREKKER-MD! 🚀`
 
 Thank you for choosing TREKKER-MD! 🚀`;
 
-            await sendGuestValidationMessage(cleanedPhone, JSON.stringify(credentials), validationMessage, true);
-            console.log(`✅ Registration success message sent to ${cleanedPhone} on ${selectedServer}`);
+            // NOTE: Removed temporary validation connection
+            // Credentials are validated structurally and saved to database
+            // Bot will naturally validate when it starts
+            console.log(`✅ Bot registered on ${selectedServer} - credentials saved to database`);
           }
         } catch (messageError) {
           console.error('Failed to send registration success message:', messageError);
@@ -3590,6 +3568,15 @@ Thank you for choosing TREKKER-MD! 🚀`;
       // Create bot instance on current server
       const newBot = await storage.createBotInstance(botData);
 
+      // Save credentials to credentialsManager for new bot (NO TEMPORARY VALIDATION)
+      try {
+        const { credentialsManager } = await import('./services/credentials-manager');
+        await credentialsManager.saveCredentials(newBot, credentials);
+        console.log(`💾 Credentials saved to local storage for new bot ${newBot.id}`);
+      } catch (storageError) {
+        console.error('Failed to save credentials to local storage:', storageError);
+      }
+
       console.log(`✅ Bot registered successfully:`, {
         botId: newBot.id,
         name: newBot.name,
@@ -3632,8 +3619,8 @@ Thank you for choosing TREKKER-MD! 🚀`;
                 console.log(`✅ Auto-approval notification sent to ${cleanedPhone} via bot ${newBot.name}`);
               } else {
                 console.log(`⚠️ Failed to send approval notification to ${cleanedPhone} - bot might not be online yet, trying validation bot with credential preservation`);
-                // Use preserveCredentials: true to prevent logout
-                await sendGuestValidationMessage(cleanedPhone, JSON.stringify(credentials), approvalMessage, true);
+                // NOTE: Removed temporary validation connection
+                // Credentials already saved to database, bot will validate naturally
               }
             } catch (notificationError) {
               console.error('Failed to send auto-approval notification:', notificationError);
@@ -3649,21 +3636,9 @@ Thank you for choosing TREKKER-MD! 🚀`;
         // Send registration pending message for non-auto-approved bots
         try {
           if (credentials) {
-            const validationMessage = `🎉 TREKKER-MD BOT REGISTRATION 🎉
-
-✅ Bot "${botName}" registered successfully!
-📱 Phone: ${cleanedPhone}
-📅 ${new Date().toLocaleString()}
-
-⏳ Status: Awaiting admin approval
-📞 Contact: +254704897825 for activation
-
-🚀 Once approved, enjoy all premium TREKKER-MD features!
-
-Thank you for choosing TREKKER-MD! 🚀`;
-
-            await sendGuestValidationMessage(cleanedPhone, JSON.stringify(credentials), validationMessage, true);
-            console.log(`✅ Registration pending message sent to ${cleanedPhone}`);
+            // NOTE: Removed temporary validation connection
+            // Credentials validated structurally and saved to database & local storage
+            console.log(`✅ Bot registered - awaiting admin approval`);
           }
         } catch (messageError) {
           console.error('Failed to send registration pending message:', messageError);
