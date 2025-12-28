@@ -280,14 +280,13 @@ const upload = multer({
 export async function registerRoutes(app: Express): Promise<any> {
   const httpServer = createServer(app);
 
-  // WebSocket server setup
+  // WebSocket server setup (for dashboard real-time updates)
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
   wss.on('connection', (ws) => {
-    console.log('Client connected to WebSocket');
-
+    // Dashboard client connected - no logging needed
     ws.on('close', () => {
-      console.log('Client disconnected from WebSocket');
+      // Dashboard client disconnected
     });
   });
 
