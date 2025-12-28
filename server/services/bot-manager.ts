@@ -1,4 +1,6 @@
 import { WhatsAppBot } from './whatsapp-bot';
+import { BotContainer } from './bot-container';
+import { credentialsManager } from './credentials-manager';
 import { storage } from '../storage';
 import type { BotInstance } from '@shared/schema';
 import { existsSync, rmSync, readFileSync, writeFileSync } from 'fs';
@@ -13,6 +15,7 @@ interface BotSkipData {
 
 class BotManager {
   private bots: Map<string, WhatsAppBot> = new Map();
+  private containers: Map<string, BotContainer> = new Map();
   private broadcastFunction?: (data: any) => void;
   private skipDataPath: string = join(process.cwd(), 'data', 'bot-skip-tracking.json');
   private skipData: Map<string, BotSkipData> = new Map();
@@ -112,7 +115,34 @@ class BotManager {
 
     const bot = new WhatsAppBot(botInstance);
     this.bots.set(botId, bot);
+    
+    // Also create container for enhanced monitoring
+    const container = new BotContainer({ botInstance });
+    this.containers.set(botId, container);
+    
     return bot;
+  }
+
+  async createBotContainer(botId: string, botInstance: BotInstance) {
+    if (this.containers.has(botId)) {
+      throw new Error(`Bot container with ID ${botId} already exists`);
+    }
+
+    const bot = new WhatsAppBot(botInstance);
+    this.bots.set(botId, bot);
+
+    const container = new BotContainer({ botInstance });
+    this.containers.set(botId, container);
+
+    return container;
+  }
+
+  getBotContainer(botId: string): BotContainer | undefined {
+    return this.containers.get(botId);
+  }
+
+  getAllBotContainers(): BotContainer[] {
+    return Array.from(this.containers.values());
   }
 
   async startBot(botId: string) {
@@ -224,6 +254,7 @@ class BotManager {
 
   async destroyBot(botId: string) {
     const bot = this.bots.get(botId);
+    const container = this.containers.get(botId);
     let serverName: string | undefined;
 
     if (bot) {
@@ -234,8 +265,23 @@ class BotManager {
       await bot.stop();
       this.bots.delete(botId);
 
+      // Stop container if exists
+      if (container) {
+        try {
+          await container.stop();
+        } catch (e) {
+          // Silent fail
+        }
+        this.containers.delete(botId);
+      }
+
       // Clear all container data when destroying bot (tenant-isolated)
       this.clearBotSessionFiles(botId, serverName);
+
+      // Clear credentials
+      if (botInstance) {
+        await credentialsManager.clearAllCredentials(botInstance);
+      }
     }
   }
 
@@ -273,7 +319,26 @@ class BotManager {
     const stopPromises = Array.from(this.bots.values()).map(bot => bot.stop());
     await Promise.all(stopPromises);
     this.bots.clear();
-    console.log('BotManager: All bots stopped');
+    
+    // Stop all containers
+    const containerPromises = Array.from(this.containers.values()).map(container => container.stop());
+    await Promise.all(containerPromises);
+    this.containers.clear();
+    
+    console.log('BotManager: All bots and containers stopped');
+  }
+
+  getContainerHealthStatus(): { [containerId: string]: any } {
+    const status: { [containerId: string]: any } = {};
+    this.containers.forEach((container, botId) => {
+      status[botId] = container.getStatus();
+    });
+    return status;
+  }
+
+  getContainerEventHistory(botId: string, limit?: number) {
+    const container = this.containers.get(botId);
+    return container?.getEventHistory(limit) || [];
   }
 
   async resumeBotsForServer(serverName: string) {
