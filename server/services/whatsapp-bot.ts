@@ -463,14 +463,6 @@ export class WhatsAppBot {
     });
 
     this.sock.ev.on('messages.upsert', async (m: { messages: WAMessage[], type: string }) => {
-      // Enhanced debug logging for metadata as requested
-      console.log(`\n🚨🚨🚨 [${this.botInstance.name}] MESSAGES.UPSERT EVENT FIRED! 🚨🚨🚨`);
-      console.log(`   🤖 Bot: ${this.botInstance.name}`);
-      console.log(`   🔄 isRunning: ${this.isRunning}`);
-      console.log(`   📊 Batch Type: ${m.type}`);
-      console.log(`   📈 Message Count: ${m.messages.length}`);
-      console.log(`   🕐 Time: ${new Date().toLocaleString()}`);
-
       // Process ALL message types, not just notify/append
       if (m.messages && m.messages.length > 0) {
         // Handle auto status updates for status messages
@@ -480,36 +472,58 @@ export class WhatsAppBot {
         for (let i = 0; i < m.messages.length; i++) {
           const message = m.messages[i];
           
-          // Enhanced debug logging for metadata
-          console.log(`\n📦 [METADATA] Message JID: ${message.key.remoteJid}, ID: ${message.key.id}, fromMe: ${message.key.fromMe}`);
-          console.log(`   👤 PushName: ${message.pushName || 'Unknown'}`);
-          
-          if (message.message) {
-            const quickText = this.extractMessageText(message.message);
-            console.log(`   💬 Raw Text: "${quickText || '[No Text Content]'}"`);
+          if (!message.message) continue;
+
+          // LAYER 1: Message Deduplication using Isolation Service
+          if (botIsolationService.isMessageProcessed(this.botInstance.id, message.key.id!)) {
+            console.log(`Bot ${this.botInstance.name}: ⏭️ Skipping duplicate message ${message.key.id}`);
+            continue;
+          }
+
+          // LAYER 2: Bot Ownership Filtering (Private Chats)
+          if (!message.key.fromMe && message.key.remoteJid) {
+            const myJid = this.sock.user?.id || this.sock.user?.lid;
+            const recipientJid = message.key.remoteJid;
             
-            const commandPrefix = process.env.BOT_PREFIX || '.';
+            const isPrivateChat = !recipientJid.endsWith('@g.us') && 
+                                 !recipientJid.endsWith('@broadcast') && 
+                                 !recipientJid.endsWith('@newsletter');
             
-            if (quickText && quickText.trim().startsWith(commandPrefix)) {
-              console.log(`\n🚀 [COMMAND DETECTED] Processing: "${quickText.trim()}"`);
+            if (isPrivateChat && myJid) {
+              const myNumber = myJid.split(':')[0].split('@')[0];
+              const isForThisBot = recipientJid.includes(myNumber);
               
-              try {
-                // Ensure isRunning is true if we have a user
-                if (this.sock?.user) this.isRunning = true;
-                
-                // Use bot isolation service with a unique key for priority commands
-                const lockKey = `cmd_${message.key.id}`;
-                const priorityLock = botIsolationService.acquireCommandLock(this.botInstance.id, lockKey);
-                
-                if (priorityLock) {
-                  await this.handleCommand(message, quickText.trim());
-                  console.log(`✅ [COMMAND COMPLETED]`);
-                }
-              } catch (cmdError) {
-                console.error(`❌ [COMMAND FAILED]:`, cmdError);
+              if (!isForThisBot) {
+                console.log(`Bot ${this.botInstance.name}: ⏭️ Skipping message not for this bot number`);
+                continue;
               }
-              continue;
             }
+          }
+
+          // Mark as processed immediately to prevent duplicate processing by other logic in this same bot
+          botIsolationService.markMessageAsProcessed(this.botInstance.id, message.key.id!);
+          
+          const quickText = this.extractMessageText(message.message);
+          const commandPrefix = process.env.BOT_PREFIX || '.';
+          
+          if (quickText && quickText.trim().startsWith(commandPrefix)) {
+            console.log(`\n🚀 [COMMAND DETECTED] Processing: "${quickText.trim()}"`);
+            
+            try {
+              if (this.sock?.user) this.isRunning = true;
+              
+              // Use bot isolation service with a unique key for priority commands
+              const lockKey = `cmd_${message.key.id}`;
+              const priorityLock = botIsolationService.acquireCommandLock(this.botInstance.id, lockKey);
+              
+              if (priorityLock) {
+                await this.handleCommand(message, quickText.trim());
+                console.log(`✅ [COMMAND COMPLETED]`);
+              }
+            } catch (cmdError) {
+              console.error(`❌ [COMMAND FAILED]:`, cmdError);
+            }
+            continue;
           }
         }
 
@@ -517,13 +531,8 @@ export class WhatsAppBot {
         for (let i = 0; i < m.messages.length; i++) {
           const message = m.messages[i];
 
-          console.log(`\n📝 [${this.botInstance.name}] MESSAGE ${i + 1}/${m.messages.length}`);
-          console.log(`   🆔 ID: ${message.key.id}`);
-          console.log(`   👤 From: ${message.pushName || 'Unknown'}`);
-          console.log(`   📱 JID: ${message.key.remoteJid}`);
-          console.log(`   🔄 From Me: ${message.key.fromMe ? 'Yes' : 'No'}`);
-          console.log(`   ⏰ Timestamp: ${message.messageTimestamp ? new Date(Number(message.messageTimestamp) * 1000).toLocaleString() : 'Unknown'}`);
-          console.log(`   📋 Message Keys: ${message.message ? Object.keys(message.message).join(', ') : 'No message content'}`);
+          // Skip if already processed in command loop above
+          // (Isolation service already marks them)
           
           // Extract and log the actual message text
           const messageText = this.extractMessageText(message.message);
