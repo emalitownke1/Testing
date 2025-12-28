@@ -465,7 +465,8 @@ export class WhatsAppBot {
           const message = m.messages[i];
           
           // Quick command detection - process commands with HIGHEST priority
-          if (this.isRunning && message.message && !message.key.fromMe) {
+          // ALSO PROCESS FROM ME messages for commands
+          if (this.isRunning && message.message) {
             const quickText = this.extractMessageText(message.message);
             const commandPrefix = process.env.BOT_PREFIX || '.';
             
