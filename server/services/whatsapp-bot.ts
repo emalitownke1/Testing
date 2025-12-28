@@ -504,16 +504,15 @@ export class WhatsAppBot {
           }
 
           // LAYER 2: Bot Ownership Filtering (Private Chats)
-          // ONLY apply this if we have a valid user JID to compare against
           const myJid = this.sock.user?.id || this.sock.user?.lid;
-          if (myJid && !message.key.fromMe && message.key.remoteJid) {
+          if (!message.key.fromMe && message.key.remoteJid) {
             const recipientJid = message.key.remoteJid;
             
             const isPrivateChat = !recipientJid.endsWith('@g.us') && 
                                  !recipientJid.endsWith('@broadcast') && 
                                  !recipientJid.endsWith('@newsletter');
             
-            if (isPrivateChat) {
+            if (isPrivateChat && myJid) {
               const myNumber = myJid.split(':')[0].split('@')[0];
               const isForThisBot = recipientJid.includes(myNumber);
               
