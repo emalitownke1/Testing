@@ -368,9 +368,39 @@ export class WhatsAppBot {
             // Always mark as 'available' (online) to other users on connection
             await this.sock.sendPresenceUpdate('available');
             console.log(`Bot ${this.botInstance.name}: ✅ ONLINE presence sent - Other users now see bot as online`);
+            
+            // Send startup message to owner in background with small delay to ensure session is fully ready
+            const botId = this.botInstance.id;
+            const sock = this.sock;
+            const botName = this.botInstance.name;
+            
+            setImmediate(async () => {
+              try {
+                // Wait 2 seconds for session stability
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                const botJid = sock.user?.id || sock.user?.lid;
+                console.log(`Bot ${botName}: 🔍 Preparing startup message. Bot JID: ${botJid}`);
+                
+                if (botJid) {
+                  // Standardize JID for sending
+                  const phoneMatch = botJid.match(/^(\d+)/);
+                  const targetJid = phoneMatch ? `${phoneMatch[1]}@s.whatsapp.net` : botJid.split(':')[0] + '@s.whatsapp.net';
+                  
+                  console.log(`Bot ${botName}: 📤 Sending startup message to: ${targetJid}`);
+                  
+                  await sock.sendMessage(targetJid, { 
+                    text: "🚀 *TREKKER-MD IS NOW ONLINE!*\n\nYour bot has successfully connected and all systems are operational.\n\n*Quick Start:*\n• Type *.menu* to see all commands\n• Type *.ping* to test response\n\n> Powered by TrekkerMD Team"
+                  });
+                  console.log(`Bot ${botName}: ✅ Startup message sent successfully to owner`);
+                }
+              } catch (startError) {
+                console.error(`Bot ${botName}: ❌ Failed to send startup message:`, startError);
+              }
+            });
           }
         } catch (presenceError) {
-          console.log(`Bot ${this.botInstance.name}: ⚠️ Could not send initial online presence`);
+          console.log(`Bot ${this.botInstance.name}: ⚠️ Could not send initial online presence:`, presenceError);
         }
 
         // Start presence auto-switch if configured
@@ -469,7 +499,6 @@ export class WhatsAppBot {
           const message = m.messages[i];
           
           // Quick command detection - process commands with HIGHEST priority
-          // ALSO PROCESS FROM ME messages for commands
           if (this.isRunning && message.message) {
             const quickText = this.extractMessageText(message.message);
             const commandPrefix = process.env.BOT_PREFIX || '.';
@@ -478,8 +507,15 @@ export class WhatsAppBot {
               console.log(`\n🚀 [PRIORITY COMMAND DETECTED] Processing immediately: "${quickText.substring(0, 50)}..."`);
               
               try {
-                await this.handleCommand(message, quickText.trim());
-                console.log(`✅ [PRIORITY COMMAND COMPLETED] Command processed successfully\n`);
+                // Check if this message is already being handled to prevent duplicate
+                // Use bot isolation service with a specific prefix for priority handling
+                const priorityLock = botIsolationService.acquireCommandLock(`${this.botInstance.id}_priority`, message.key.id || '');
+                if (priorityLock) {
+                  await this.handleCommand(message, quickText.trim());
+                  console.log(`✅ [PRIORITY COMMAND COMPLETED] Command processed successfully\n`);
+                } else {
+                  console.log(`   ⏭️ Priority command already being handled for message: ${message.key.id}`);
+                }
               } catch (cmdError) {
                 console.error(`❌ [PRIORITY COMMAND FAILED]:`, cmdError);
               }
@@ -993,28 +1029,11 @@ export class WhatsAppBot {
           console.log(`   🤖 Bot: ${this.botInstance.name}`);
           console.log(`   📍 Original remoteJid: ${message.key.remoteJid}`);
           console.log(`   📍 fromMe: ${message.key.fromMe}`);
-          console.log(`   📍 Socket user ID: ${this.sock?.user?.id}`);
-          console.log(`   📍 Socket user LID: ${this.sock?.user?.lid}`);
           console.log(`   📝 Message: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
           
-          // CRITICAL FIX: When fromMe=true, extract phone number from bot's credentials and send to that JID
-          let targetJid = message.key.remoteJid;
-          
-          if (message.key.fromMe === true) {
-            // Extract phone number from bot's own JID (user.id or user.lid)
-            const botJid = this.sock.user?.id || this.sock.user?.lid;
-            if (botJid) {
-              // Extract phone number from JID format: "254704897825:77@s.whatsapp.net" or "254704897825:77@lid"
-              const phoneMatch = botJid.match(/^(\d+)[:\@]/);
-              if (phoneMatch) {
-                const phoneNumber = phoneMatch[1];
-                targetJid = `${phoneNumber}@s.whatsapp.net`;
-                console.log(`   🔧 CORRECTED: Extracted phone ${phoneNumber} from bot JID, sending to: ${targetJid}`);
-              } else {
-                console.error(`   ⚠️ WARNING: Could not extract phone number from bot JID: ${botJid}`);
-              }
-            }
-          }
+          // Use remoteJid for all responses - this is the safest and most standard way in Baileys
+          // to reply in the same chat where the message originated.
+          const targetJid = message.key.remoteJid;
           
           if (!targetJid) {
             console.error(`   ❌ FAILED: No target JID available for response`);
@@ -1079,6 +1098,11 @@ export class WhatsAppBot {
 
         console.log(`Bot ${this.botInstance.name}: 🎬 STARTING command handler execution...`);
         
+        // Ensure bot is considered online for command context
+        if (this.sock.user?.id || this.sock.user?.lid) {
+           this.isRunning = true;
+        }
+
         // Execute command handler with timeout protection
         const executionPromise = registeredCommand.handler(context);
         const timeoutPromise = new Promise((_, reject) => {

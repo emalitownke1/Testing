@@ -8,7 +8,6 @@ import moment from 'moment-timezone';
 import os from 'os';
 import axios from 'axios';
 import { join } from 'path';
-import './core-commands.js'; // Load core commands
 import './channel-commands.js'; // Load channel commands
 import './settings-commands.js'; // Load settings commands
 import './afmis-commands.js'; // Load AFMIS admin commands
