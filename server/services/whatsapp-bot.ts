@@ -76,13 +76,21 @@ export class WhatsAppBot {
 
   private fixBuffers(obj: any): any {
     if (obj === null || obj === undefined) return obj;
-    if (Buffer.isBuffer(obj)) return obj;
+    
+    // If it's already a Buffer or Uint8Array, return as is
+    if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return obj;
+
     if (typeof obj === 'object') {
+      // Handle the JSON serialization of a Buffer: { type: 'Buffer', data: [...] }
       if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
         return Buffer.from(obj.data);
       }
+      
+      // Recursively fix properties
       for (const key in obj) {
-        obj[key] = this.fixBuffers(obj[key]);
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          obj[key] = this.fixBuffers(obj[key]);
+        }
       }
     }
     return obj;
