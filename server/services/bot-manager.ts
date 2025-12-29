@@ -179,6 +179,10 @@ class BotManager {
       // Stop existing bot instance if offline
       if (existingBot) {
         try {
+          // If the bot is already in the process of starting or online, don't stop it
+          if (existingBot.getStatus() === 'online' || existingBot.getStatus() === 'loading') {
+            return;
+          }
           await existingBot.stop();
         } catch (e) {
           // Silently fail

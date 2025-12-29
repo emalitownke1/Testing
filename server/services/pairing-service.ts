@@ -166,7 +166,10 @@ export async function generatePairingCode(phoneNumber: string): Promise<PairingR
           if (connection === "close") {
             console.log('⚠️ Connection closed. Status:', statusCode);
 
-            if (!resolved) {
+            // Don't treat 428 or 515 as fatal errors that should clear the session
+            const isRetryable = statusCode === 428 || statusCode === 515 || statusCode === 408;
+
+            if (!resolved && !isRetryable) {
               resolved = true;
               await cleanup(sock, authDir, timers);
               
@@ -200,7 +203,12 @@ export async function generatePairingCode(phoneNumber: string): Promise<PairingR
             timers.forEach(t => clearTimeout(t));
             
             const cleanupTimer = setTimeout(async () => {
-              await cleanup(sock, authDir, []);
+              // Only cleanup if connection wasn't established or failed
+              if (!resolved || sock?.ws?.readyState !== 1) {
+                await cleanup(sock, authDir, []);
+              } else {
+                console.log('🔄 Skipping cleanup to preserve established pairing connection');
+              }
             }, 5000);
             timers.push(cleanupTimer);
             

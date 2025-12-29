@@ -349,6 +349,17 @@ export class WhatsAppBot {
         this.isRunning = true;
         this.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
 
+        // Update database with new connection status and possibly new bot ID info if needed
+        const myJid = this.sock.user?.id || this.sock.user?.lid;
+        const myNumber = myJid?.split(':')[0]?.split('@')[0];
+
+        await storage.updateBotInstance(this.botInstance.id, {
+          status: 'online',
+          lastActivity: new Date(),
+          credentialVerified: true,
+          credentialPhone: myNumber || this.botInstance.phoneNumber
+        });
+
         // Provide sock to auto-status service for status viewing
         this.autoStatusService.setSock(this.sock);
 
