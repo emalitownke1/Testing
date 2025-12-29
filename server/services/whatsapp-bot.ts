@@ -65,11 +65,27 @@ export class WhatsAppBot {
     this.store = null;
     console.log(`Bot ${this.botInstance.name}: Using antidelete service for message storage`);
 
-    // Restore credentials if needed (server restart scenario)
-    const credsFilePath = join(this.authDir, 'creds.json');
-    if (!existsSync(credsFilePath) && botInstance.credentials) {
+    // Always restore credentials from database on startup to ensure consistency
+    if (botInstance.credentials) {
+      console.log(`Bot ${this.botInstance.name}: Forcing credential restoration from database`);
       this.saveCredentialsToAuthDir(botInstance.credentials);
+    } else if (!existsSync(join(this.authDir, 'creds.json'))) {
+      console.log(`Bot ${this.botInstance.name}: No credentials in database or auth dir`);
     }
+  }
+
+  private fixBuffers(obj: any): any {
+    if (obj === null || obj === undefined) return obj;
+    if (Buffer.isBuffer(obj)) return obj;
+    if (typeof obj === 'object') {
+      if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
+        return Buffer.from(obj.data);
+      }
+      for (const key in obj) {
+        obj[key] = this.fixBuffers(obj[key]);
+      }
+    }
+    return obj;
   }
 
   private saveCredentialsToAuthDir(credentials: any) {
@@ -89,6 +105,10 @@ export class WhatsAppBot {
         console.log(`Bot ${this.botInstance.name}: Using v7 credentials directly for creds.json`);
         // credentials is already in the right format
       }
+
+      // Baileys stores some fields as Buffers. When serialized to JSON, they become {type: 'Buffer', data: []}
+      // On load, we must ensure they are converted back to Buffers/Uint8Arrays
+      credsContent = this.fixBuffers(credsContent);
 
       // Save ONLY the creds content to creds.json (Baileys expects unwrapped format)
       writeFileSync(join(this.authDir, 'creds.json'), JSON.stringify(credsContent, null, 2));

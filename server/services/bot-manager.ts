@@ -190,6 +190,10 @@ class BotManager {
         this.bots.delete(botId);
       }
 
+      // Force fresh start from database credentials by clearing local auth files
+      // this ensures we don't have mismatch between database and filesystem
+      this.clearBotSessionFiles(botId, botInstance.serverName);
+
       // Create and start bot instance
       const newBot = new WhatsAppBot(botInstance);
       this.bots.set(botId, newBot);
