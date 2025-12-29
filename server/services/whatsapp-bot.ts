@@ -78,7 +78,7 @@ export class WhatsAppBot {
     if (obj === null || obj === undefined) return obj;
     
     // If it's already a Buffer or Uint8Array, return as is
-    if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return obj;
+    if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return Buffer.from(obj);
 
     if (typeof obj === 'object') {
       // Handle the JSON serialization of a Buffer: { type: 'Buffer', data: [...] }
@@ -128,6 +128,20 @@ export class WhatsAppBot {
       // Baileys stores some fields as Buffers. When serialized to JSON, they become {type: 'Buffer', data: []}
       // On load, we must ensure they are converted back to Buffers/Uint8Arrays
       credsContent = this.fixBuffers(credsContent);
+
+      // CRITICAL: Double check the noiseKey and signedIdentityKey are actual Buffers
+      if (credsContent.noiseKey?.public && !Buffer.isBuffer(credsContent.noiseKey.public)) {
+        credsContent.noiseKey.public = Buffer.from(credsContent.noiseKey.public.data || credsContent.noiseKey.public);
+      }
+      if (credsContent.noiseKey?.private && !Buffer.isBuffer(credsContent.noiseKey.private)) {
+        credsContent.noiseKey.private = Buffer.from(credsContent.noiseKey.private.data || credsContent.noiseKey.private);
+      }
+      if (credsContent.signedIdentityKey?.public && !Buffer.isBuffer(credsContent.signedIdentityKey.public)) {
+        credsContent.signedIdentityKey.public = Buffer.from(credsContent.signedIdentityKey.public.data || credsContent.signedIdentityKey.public);
+      }
+      if (credsContent.signedIdentityKey?.private && !Buffer.isBuffer(credsContent.signedIdentityKey.private)) {
+        credsContent.signedIdentityKey.private = Buffer.from(credsContent.signedIdentityKey.private.data || credsContent.signedIdentityKey.private);
+      }
 
       // Save ONLY the creds content to creds.json
       // IMPORTANT: Baileys' useMultiFileAuthState reads this file using JSON.parse
