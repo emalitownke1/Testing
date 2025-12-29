@@ -77,28 +77,36 @@ export class WhatsAppBot {
   private fixBuffers(obj: any): any {
     if (obj === null || obj === undefined) return obj;
     
-    // If it's already a Buffer or Uint8Array, return as is
-    if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return obj;
+    // 1. Handle actual Buffer/Uint8Array
+    if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return Buffer.from(obj);
 
-    // Handle serialized Buffer object: { type: 'Buffer', data: [...] }
+    // 2. Handle { type: 'Buffer', data: [...] } format (Baileys/JSON standard)
     if (typeof obj === 'object' && obj.type === 'Buffer' && Array.isArray(obj.data)) {
       return Buffer.from(obj.data);
     }
 
-    // Handle plain Array of numbers that should be a Buffer
-    if (Array.isArray(obj) && obj.length > 0 && typeof obj[0] === 'number') {
-      return Buffer.from(obj);
-    }
-
+    // 3. Recursive traversal for objects and arrays
     if (typeof obj === 'object') {
-      const newObj: any = Array.isArray(obj) ? [] : {};
+      const isArray = Array.isArray(obj);
+      const newObj: any = isArray ? [] : {};
+      
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
           newObj[key] = this.fixBuffers(obj[key]);
         }
       }
+      
+      // If it was an array, check if it's a pure numeric array that should have been a Buffer
+      if (isArray && newObj.length > 0 && typeof newObj[0] === 'number') {
+        const isPureNumbers = newObj.every((v: any) => typeof v === 'number');
+        if (isPureNumbers) {
+          return Buffer.from(newObj);
+        }
+      }
+
       return newObj;
     }
+    
     return obj;
   }
 
@@ -106,67 +114,50 @@ export class WhatsAppBot {
     try {
       console.log(`Bot ${this.botInstance.name}: Saving Baileys session credentials`);
 
-      // Detect credential format and extract the creds object for creds.json
+      // Detect credential format
       let credsContent = credentials;
-
-      // Handle wrapped format (fields under creds) - usually from database/session ID
       if (credentials.creds && typeof credentials.creds === 'object') {
         credsContent = credentials.creds;
-        console.log(`Bot ${this.botInstance.name}: Extracting creds from wrapped format`);
-      } 
-      // Handle v7 format (fields at root level)
-      else if (credentials.noiseKey && credentials.signedIdentityKey) {
-        console.log(`Bot ${this.botInstance.name}: Using v7 credentials directly for creds.json`);
       }
 
-      // Deep clone to avoid mutating the source while fixing
-      // We use a custom replacer to preserve Buffer-like structures during clone if they exist
+      // Ensure we have a clean object to work with
       credsContent = JSON.parse(JSON.stringify(credsContent));
 
-      // Baileys stores some fields as Buffers. When serialized to JSON, they become {type: 'Buffer', data: []}
-      // On load, we must ensure they are converted back to Buffers/Uint8Arrays
+      // Convert ALL potential Buffer-like objects recursively before writing
       credsContent = this.fixBuffers(credsContent);
-
-      // CRITICAL: Double check specific keys used in WhatsApp's Noise protocol
-      const ensureBuffer = (field: any) => {
-        if (!field) return field;
-        if (Buffer.isBuffer(field)) return field;
-        if (field.data && Array.isArray(field.data)) return Buffer.from(field.data);
-        if (Array.isArray(field)) return Buffer.from(field);
-        return field;
-      };
-
-      if (credsContent.noiseKey) {
-        if (credsContent.noiseKey.public) credsContent.noiseKey.public = ensureBuffer(credsContent.noiseKey.public);
-        if (credsContent.noiseKey.private) credsContent.noiseKey.private = ensureBuffer(credsContent.noiseKey.private);
-      }
-      if (credsContent.signedIdentityKey) {
-        if (credsContent.signedIdentityKey.public) credsContent.signedIdentityKey.public = ensureBuffer(credsContent.signedIdentityKey.public);
-        if (credsContent.signedIdentityKey.private) credsContent.signedIdentityKey.private = ensureBuffer(credsContent.signedIdentityKey.private);
-      }
-      if (credsContent.signedPreKey?.keyPair) {
-        if (credsContent.signedPreKey.keyPair.public) credsContent.signedPreKey.keyPair.public = ensureBuffer(credsContent.signedPreKey.keyPair.public);
-        if (credsContent.signedPreKey.keyPair.private) credsContent.signedPreKey.keyPair.private = ensureBuffer(credsContent.signedPreKey.keyPair.private);
-      }
-
-      // Save ONLY the creds content to creds.json
-      // IMPORTANT: Baileys' useMultiFileAuthState reads this file using JSON.parse
-      // It DOES NOT automatically convert {type: 'Buffer', data: [...]} back to Buffers
-      // unless we use a custom reviver or fix it before writing if we want it to stay fixed.
-      // However, Baileys internal code often expects Buffers in the object returned by useMultiFileAuthState.
-      // Since useMultiFileAuthState reads the file, the file MUST contain the serialized form, 
-      // but Baileys might have issues if it's not exactly what it expects.
       
+      // Special hydration for keys that MUST be Buffers for Noise protocol
+      const ensureKeys = (base: any) => {
+        if (!base) return;
+        const keysToFix = ['noiseKey', 'signedIdentityKey', 'signedPreKey', 'pairingEphemeralKeyPair'];
+        keysToFix.forEach(key => {
+          if (base[key]) {
+            if (base[key].public) base[key].public = this.fixBuffers(base[key].public);
+            if (base[key].private) base[key].private = this.fixBuffers(base[key].private);
+            if (key === 'signedPreKey' && base[key].keyPair) {
+              base[key].keyPair.public = this.fixBuffers(base[key].keyPair.public);
+              base[key].keyPair.private = this.fixBuffers(base[key].keyPair.private);
+            }
+          }
+        });
+      };
+      ensureKeys(credsContent);
+
+      if (!existsSync(this.authDir)) {
+        mkdirSync(this.authDir, { recursive: true });
+      }
+
+      // Write to file. Baileys' useMultiFileAuthState will read this via JSON.parse.
+      // We use a custom replacer to ensure Buffers are serialized in a way they can be recovered.
       const bufferReplacer = (key: string, value: any) => {
-        if (Buffer.isBuffer(value) || value instanceof Uint8Array || (value && value.type === 'Buffer')) {
-          return Array.from(value.data || value);
+        if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+          return { type: 'Buffer', data: Array.from(value) };
         }
         return value;
       };
 
       writeFileSync(join(this.authDir, 'creds.json'), JSON.stringify(credsContent, bufferReplacer, 2));
-
-      console.log(`Bot ${this.botInstance.name}: Baileys credentials saved successfully`);
+      console.log(`Bot ${this.botInstance.name}: Baileys credentials saved successfully to ${this.authDir}/creds.json`);
     } catch (error) {
       console.error(`Bot ${this.botInstance.name}: Error saving credentials:`, error);
     }
