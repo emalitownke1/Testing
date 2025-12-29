@@ -80,11 +80,6 @@ export class WhatsAppBot {
     // If it's already a Buffer or Uint8Array, return as is
     if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return obj;
 
-    // Handle Array of numbers that should be Buffer (JSON sterilization byproduct)
-    if (Array.isArray(obj) && obj.length > 0 && typeof obj[0] === 'number') {
-      return Buffer.from(obj);
-    }
-
     if (typeof obj === 'object') {
       // Handle the JSON serialization of a Buffer: { type: 'Buffer', data: [...] }
       if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
@@ -92,20 +87,19 @@ export class WhatsAppBot {
       }
       
       // Recursively fix properties
+      const newObj: any = Array.isArray(obj) ? [] : {};
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
           const val = obj[key];
           // Baileys specific: If it looks like a serialized buffer but is inside another object
           if (val && typeof val === 'object' && val.type === 'Buffer' && Array.isArray(val.data)) {
-            obj[key] = Buffer.from(val.data);
-          } else if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'number') {
-            // Fix direct numeric arrays inside objects
-            obj[key] = Buffer.from(val);
+            newObj[key] = Buffer.from(val.data);
           } else {
-            obj[key] = this.fixBuffers(val);
+            newObj[key] = this.fixBuffers(val);
           }
         }
       }
+      return newObj;
     }
     return obj;
   }

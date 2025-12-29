@@ -163,9 +163,17 @@ export async function generatePairingCode(phoneNumber: string): Promise<PairingR
               
               if (bot) {
                 // Ensure credentials are saved in a format compatible with Baileys
-                // Some fields might need to be Buffer or special types, but JSON.stringify handles basic cases
+                // We must preserve the { type: 'Buffer', data: [...] } structure
+                // which is Baileys standard for serializing Buffers
+                const serializedCreds = JSON.parse(JSON.stringify(state.creds, (key, value) => {
+                  if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+                    return { type: 'Buffer', data: Array.from(value) };
+                  }
+                  return value;
+                }));
+
                 await storage.updateBotInstance(bot.id, {
-                  credentials: JSON.parse(JSON.stringify(state.creds)),
+                  credentials: serializedCreds,
                   credentialVerified: true,
                   credentialPhone: phoneNumber.replace('+', ''),
                   status: 'online'
