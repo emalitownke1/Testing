@@ -89,7 +89,13 @@ export class WhatsAppBot {
       // Recursively fix properties
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
-          obj[key] = this.fixBuffers(obj[key]);
+          const val = obj[key];
+          // Baileys specific: If it looks like a serialized buffer but is inside another object
+          if (val && typeof val === 'object' && val.type === 'Buffer' && Array.isArray(val.data)) {
+            obj[key] = Buffer.from(val.data);
+          } else {
+            obj[key] = this.fixBuffers(val);
+          }
         }
       }
     }
@@ -111,15 +117,30 @@ export class WhatsAppBot {
       // Handle v7 format (fields at root level)
       else if (credentials.noiseKey && credentials.signedIdentityKey) {
         console.log(`Bot ${this.botInstance.name}: Using v7 credentials directly for creds.json`);
-        // credentials is already in the right format
       }
+
+      // Deep clone to avoid mutating the source while fixing
+      // We use a custom replacer to preserve Buffer-like structures during clone if they exist
+      credsContent = JSON.parse(JSON.stringify(credsContent));
 
       // Baileys stores some fields as Buffers. When serialized to JSON, they become {type: 'Buffer', data: []}
       // On load, we must ensure they are converted back to Buffers/Uint8Arrays
       credsContent = this.fixBuffers(credsContent);
 
-      // Save ONLY the creds content to creds.json (Baileys expects unwrapped format)
-      writeFileSync(join(this.authDir, 'creds.json'), JSON.stringify(credsContent, null, 2));
+      // Save ONLY the creds content to creds.json
+      // IMPORTANT: Baileys' useMultiFileAuthState reads this file using JSON.parse
+      // It DOES NOT automatically convert {type: 'Buffer', data: [...]} back to Buffers
+      // unless we use a custom reviver or fix it before writing if we want it to stay fixed.
+      // However, Baileys internal code often expects Buffers in the object returned by useMultiFileAuthState.
+      // Since useMultiFileAuthState reads the file, the file MUST contain the serialized form, 
+      // but Baileys might have issues if it's not exactly what it expects.
+      
+      writeFileSync(join(this.authDir, 'creds.json'), JSON.stringify(credsContent, (key, value) => {
+        if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+          return { type: 'Buffer', data: Array.from(value) };
+        }
+        return value;
+      }, 2));
 
       console.log(`Bot ${this.botInstance.name}: Baileys credentials saved successfully`);
     } catch (error) {
