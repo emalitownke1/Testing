@@ -13,6 +13,8 @@ import {
   type WASocket
 } from '@whiskeysockets/baileys';
 import { nanoid } from 'nanoid';
+import { storage } from '../storage';
+import { getServerName } from '../db';
 
 const logger = pino({ level: "silent" });
 
@@ -152,6 +154,25 @@ export async function generatePairingCode(phoneNumber: string): Promise<PairingR
           try {
             await saveCreds();
             console.log('💾 Credentials updated to file system');
+
+            // Save credentials to database directly
+            if (state.creds) {
+              const serverName = getServerName();
+              const bots = await storage.getBotInstancesForServer(serverName);
+              const bot = bots.find(b => b.phoneNumber === phoneNumber.replace('+', ''));
+              
+              if (bot) {
+                // Ensure credentials are saved in a format compatible with Baileys
+                // Some fields might need to be Buffer or special types, but JSON.stringify handles basic cases
+                await storage.updateBotInstance(bot.id, {
+                  credentials: JSON.parse(JSON.stringify(state.creds)),
+                  credentialVerified: true,
+                  credentialPhone: phoneNumber.replace('+', ''),
+                  status: 'online'
+                });
+                console.log(`✅ Saved credentials for bot ${bot.name} to database`);
+              }
+            }
           } catch (err: any) {
             console.warn('Creds save warning:', err.message);
           }

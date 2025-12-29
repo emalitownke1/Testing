@@ -1,6 +1,5 @@
 import { WhatsAppBot } from './whatsapp-bot';
 import { BotContainer } from './bot-container';
-import { credentialsManager } from './credentials-manager';
 import { storage } from '../storage';
 import type { BotInstance } from '@shared/schema';
 import { existsSync, rmSync, readFileSync, writeFileSync } from 'fs';
@@ -285,11 +284,6 @@ class BotManager {
 
       // Clear all container data when destroying bot (tenant-isolated)
       this.clearBotSessionFiles(botId, serverName);
-
-      // Clear credentials
-      if (botInstance) {
-        await credentialsManager.clearAllCredentials(botInstance);
-      }
     }
   }
 
