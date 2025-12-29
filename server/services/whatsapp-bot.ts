@@ -78,25 +78,23 @@ export class WhatsAppBot {
     if (obj === null || obj === undefined) return obj;
     
     // If it's already a Buffer or Uint8Array, return as is
-    if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return Buffer.from(obj);
+    if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return obj;
+
+    // Handle serialized Buffer object: { type: 'Buffer', data: [...] }
+    if (typeof obj === 'object' && obj.type === 'Buffer' && Array.isArray(obj.data)) {
+      return Buffer.from(obj.data);
+    }
+
+    // Handle plain Array of numbers that should be a Buffer
+    if (Array.isArray(obj) && obj.length > 0 && typeof obj[0] === 'number') {
+      return Buffer.from(obj);
+    }
 
     if (typeof obj === 'object') {
-      // Handle the JSON serialization of a Buffer: { type: 'Buffer', data: [...] }
-      if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
-        return Buffer.from(obj.data);
-      }
-      
-      // Recursively fix properties
       const newObj: any = Array.isArray(obj) ? [] : {};
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
-          const val = obj[key];
-          // Baileys specific: If it looks like a serialized buffer but is inside another object
-          if (val && typeof val === 'object' && val.type === 'Buffer' && Array.isArray(val.data)) {
-            newObj[key] = Buffer.from(val.data);
-          } else {
-            newObj[key] = this.fixBuffers(val);
-          }
+          newObj[key] = this.fixBuffers(obj[key]);
         }
       }
       return newObj;
@@ -129,18 +127,26 @@ export class WhatsAppBot {
       // On load, we must ensure they are converted back to Buffers/Uint8Arrays
       credsContent = this.fixBuffers(credsContent);
 
-      // CRITICAL: Double check the noiseKey and signedIdentityKey are actual Buffers
-      if (credsContent.noiseKey?.public && !Buffer.isBuffer(credsContent.noiseKey.public)) {
-        credsContent.noiseKey.public = Buffer.from(credsContent.noiseKey.public.data || credsContent.noiseKey.public);
+      // CRITICAL: Double check specific keys used in WhatsApp's Noise protocol
+      const ensureBuffer = (field: any) => {
+        if (!field) return field;
+        if (Buffer.isBuffer(field)) return field;
+        if (field.data && Array.isArray(field.data)) return Buffer.from(field.data);
+        if (Array.isArray(field)) return Buffer.from(field);
+        return field;
+      };
+
+      if (credsContent.noiseKey) {
+        if (credsContent.noiseKey.public) credsContent.noiseKey.public = ensureBuffer(credsContent.noiseKey.public);
+        if (credsContent.noiseKey.private) credsContent.noiseKey.private = ensureBuffer(credsContent.noiseKey.private);
       }
-      if (credsContent.noiseKey?.private && !Buffer.isBuffer(credsContent.noiseKey.private)) {
-        credsContent.noiseKey.private = Buffer.from(credsContent.noiseKey.private.data || credsContent.noiseKey.private);
+      if (credsContent.signedIdentityKey) {
+        if (credsContent.signedIdentityKey.public) credsContent.signedIdentityKey.public = ensureBuffer(credsContent.signedIdentityKey.public);
+        if (credsContent.signedIdentityKey.private) credsContent.signedIdentityKey.private = ensureBuffer(credsContent.signedIdentityKey.private);
       }
-      if (credsContent.signedIdentityKey?.public && !Buffer.isBuffer(credsContent.signedIdentityKey.public)) {
-        credsContent.signedIdentityKey.public = Buffer.from(credsContent.signedIdentityKey.public.data || credsContent.signedIdentityKey.public);
-      }
-      if (credsContent.signedIdentityKey?.private && !Buffer.isBuffer(credsContent.signedIdentityKey.private)) {
-        credsContent.signedIdentityKey.private = Buffer.from(credsContent.signedIdentityKey.private.data || credsContent.signedIdentityKey.private);
+      if (credsContent.signedPreKey?.keyPair) {
+        if (credsContent.signedPreKey.keyPair.public) credsContent.signedPreKey.keyPair.public = ensureBuffer(credsContent.signedPreKey.keyPair.public);
+        if (credsContent.signedPreKey.keyPair.private) credsContent.signedPreKey.keyPair.private = ensureBuffer(credsContent.signedPreKey.keyPair.private);
       }
 
       // Save ONLY the creds content to creds.json
