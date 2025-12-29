@@ -225,7 +225,8 @@ export async function generatePairingCode(phoneNumber: string): Promise<PairingR
             
             const cleanupTimer = setTimeout(async () => {
               // Only cleanup if connection wasn't established or failed
-              if (!resolved || sock?.ws?.readyState !== 1) {
+              // Check if socket exists and has ws before checking state
+              if (!resolved || !sock?.ws) {
                 await cleanup(sock, authDir, []);
               } else {
                 console.log('🔄 Skipping cleanup to preserve established pairing connection');

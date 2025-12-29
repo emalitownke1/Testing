@@ -179,7 +179,8 @@ class BotManager {
       if (existingBot) {
         try {
           // If the bot is already in the process of starting or online, don't stop it
-          if (existingBot.getStatus() === 'online' || existingBot.getStatus() === 'loading') {
+          const status = existingBot.getStatus();
+          if (status === 'online' || (status as string) === 'loading') {
             return;
           }
           await existingBot.stop();

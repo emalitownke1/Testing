@@ -80,6 +80,11 @@ export class WhatsAppBot {
     // If it's already a Buffer or Uint8Array, return as is
     if (Buffer.isBuffer(obj) || obj instanceof Uint8Array) return obj;
 
+    // Handle Array of numbers that should be Buffer (JSON sterilization byproduct)
+    if (Array.isArray(obj) && obj.length > 0 && typeof obj[0] === 'number') {
+      return Buffer.from(obj);
+    }
+
     if (typeof obj === 'object') {
       // Handle the JSON serialization of a Buffer: { type: 'Buffer', data: [...] }
       if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
@@ -93,6 +98,9 @@ export class WhatsAppBot {
           // Baileys specific: If it looks like a serialized buffer but is inside another object
           if (val && typeof val === 'object' && val.type === 'Buffer' && Array.isArray(val.data)) {
             obj[key] = Buffer.from(val.data);
+          } else if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'number') {
+            // Fix direct numeric arrays inside objects
+            obj[key] = Buffer.from(val);
           } else {
             obj[key] = this.fixBuffers(val);
           }
@@ -135,12 +143,14 @@ export class WhatsAppBot {
       // Since useMultiFileAuthState reads the file, the file MUST contain the serialized form, 
       // but Baileys might have issues if it's not exactly what it expects.
       
-      writeFileSync(join(this.authDir, 'creds.json'), JSON.stringify(credsContent, (key, value) => {
-        if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
-          return { type: 'Buffer', data: Array.from(value) };
+      const bufferReplacer = (key: string, value: any) => {
+        if (Buffer.isBuffer(value) || value instanceof Uint8Array || (value && value.type === 'Buffer')) {
+          return Array.from(value.data || value);
         }
         return value;
-      }, 2));
+      };
+
+      writeFileSync(join(this.authDir, 'creds.json'), JSON.stringify(credsContent, bufferReplacer, 2));
 
       console.log(`Bot ${this.botInstance.name}: Baileys credentials saved successfully`);
     } catch (error) {
